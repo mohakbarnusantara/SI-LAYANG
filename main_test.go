@@ -178,22 +178,21 @@ func TestSeedMapsLegacyLetterOnlyWhenAddressNamesKelurahan(t *testing.T) {
 	}
 }
 
-func TestRegisterStoresSelectedHomeOffice(t *testing.T) {
-	store, err := openStore(filepath.Join(t.TempDir(), "data.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	app := &App{store: store, secret: []byte("test-secret")}
+func registerRequest(t *testing.T, fields map[string]string, withKTP bool) *http.Request {
+	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	fields := map[string]string{
-		"name": "Warga Tatura", "nik": "1234567890123456", "email": "tatura@example.test",
-		"phone": "081234567890", "birth_date": "1990-01-01", "gender": "L",
-		"address": "Jl. Anoa", "home_district": "Palu Selatan",
-		"home_neighborhood": "Tatura Utara", "password": "rahasia123",
-	}
 	for name, value := range fields {
 		if err := writer.WriteField(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if withKTP {
+		part, err := writer.CreateFormFile("ktp", "ktp.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write([]byte("\x89PNG\r\n\x1a\n0000IHDR")); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -202,6 +201,26 @@ func TestRegisterStoresSelectedHomeOffice(t *testing.T) {
 	}
 	request := httptest.NewRequest("POST", "/register", &body)
 	request.Header.Set("Content-Type", writer.FormDataContentType())
+	return request
+}
+
+func validRegisterFields() map[string]string {
+	return map[string]string{
+		"name": "Warga Tatura", "nik": "1234567890123456", "email": "tatura@example.test",
+		"phone": "081234567890", "birth_date": "1990-01-01", "gender": "L",
+		"address": "Jl. Anoa", "home_district": "Palu Selatan",
+		"home_neighborhood": "Tatura Utara", "password": "rahasia123",
+	}
+}
+
+func TestRegisterStoresSelectedHomeOffice(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "data.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{store: store, secret: []byte("test-secret"), uploadDir: t.TempDir()}
+	fields := validRegisterFields()
+	request := registerRequest(t, fields, true)
 	response := httptest.NewRecorder()
 
 	app.register(response, request)
@@ -218,6 +237,88 @@ func TestRegisterStoresSelectedHomeOffice(t *testing.T) {
 	}
 	if resident.ID == "" || resident.HomeDistrict != "Palu Selatan" || resident.HomeNeighborhood != "Tatura Utara" {
 		t.Fatalf("domisili pilihan tidak tersimpan: %#v", resident)
+	}
+	if resident.KTPPath == "" {
+		t.Fatalf("foto KTP tidak tersimpan: %#v", resident)
+	}
+}
+
+func TestRegisterRejectsInvalidNameAndMissingKTP(t *testing.T) {
+	cases := map[string]struct {
+		override map[string]string
+		withKTP  bool
+		message  string
+	}{
+		"nama berisi angka":     {map[string]string{"name": "Muh Akbar Nusantara1233"}, true, "tidak boleh mengandung angka"},
+		"nama berisi simbol":    {map[string]string{"name": "Warga@Tatura!"}, true, "hanya boleh berisi huruf"},
+		"tanda beruntun":        {map[string]string{"name": "Warga--Tatura"}, true, "hanya boleh berisi huruf"},
+		"nomor hp berisi huruf": {map[string]string{"phone": "0812abcd5678"}, true, "Nomor HP / WhatsApp"},
+		"email tidak valid":     {map[string]string{"email": "bukan-email"}, true, "Format email tidak valid"},
+		"tempat lahir angka":    {map[string]string{"birth_place": "Palu123"}, true, "Tempat lahir hanya boleh berisi huruf"},
+		"pekerjaan simbol":      {map[string]string{"occupation": "PNS@2026"}, true, "Pekerjaan hanya boleh berisi huruf"},
+		"alamat simbol aneh":    {map[string]string{"address": "Jl. Mawar <script>"}, true, "Alamat domisili mengandung karakter"},
+		"foto KTP tidak diisi":  {nil, false, "Foto KTP wajib diunggah"},
+	}
+	for label, tc := range cases {
+		t.Run(label, func(t *testing.T) {
+			store, err := openStore(filepath.Join(t.TempDir(), "data.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			app := &App{
+				store: store, secret: []byte("test-secret"), uploadDir: t.TempDir(),
+				templates: template.Must(template.New("auth").Parse(`{{define "auth"}}{{.Error}}{{end}}`)),
+			}
+			fields := validRegisterFields()
+			for k, v := range tc.override {
+				fields[k] = v
+			}
+			before := len(store.snapshot().Users)
+			response := httptest.NewRecorder()
+
+			app.register(response, registerRequest(t, fields, tc.withKTP))
+
+			if response.Code == http.StatusSeeOther {
+				t.Fatalf("pendaftaran seharusnya ditolak")
+			}
+			if !strings.Contains(response.Body.String(), tc.message) {
+				t.Fatalf("pesan galat %q tidak memuat %q", response.Body.String(), tc.message)
+			}
+			if after := len(store.snapshot().Users); after != before {
+				t.Fatalf("akun tetap tersimpan meski data tidak valid (%d -> %d)", before, after)
+			}
+		})
+	}
+}
+
+func TestValidPersonName(t *testing.T) {
+	valid := []string{
+		"Budi", "Siti Aminah", "ANDI baso", "H. Ahmad", "Muh.Rizal", "Ahmad S.",
+		"Ma'ruf Amin", "O'Neil", "Siti-Aminah", "Abd. Rahman Al-Habsyi",
+		"Budi Santoso, S.Kom", "Budi Santoso, S.Kom.", "Dr. Ir. Budi, S.Kom., M.T.",
+		"Andi Baso, S.Pd, M.Pd", "Rina, A.Md.Kom", "Prof. Dr. H. Ahmad Al-Habsyi, S.H., M.H.",
+		"Budi Santoso , S.Kom",
+	}
+	invalid := []string{
+		"", " ", "Budi1", "Andi_", "Budi@", ".", "-Budi", "'Budi", ",Budi",
+		"Budi'", "Budi-", "Budi,", "Budi--Santoso", "Budi..", "Budi.-Santoso", "Budi - Santoso", "Budi ' Santoso",
+		"Budi,, S.Kom", "Budi, , S.Kom", "Budi,.S.Kom", "Budi, S1", "Budi (S.Kom)",
+	}
+	for _, value := range valid {
+		if !validPersonName(normalizePersonName(value)) {
+			t.Errorf("%q seharusnya valid", value)
+		}
+	}
+	for _, value := range invalid {
+		if validPersonName(normalizePersonName(value)) {
+			t.Errorf("%q seharusnya tidak valid", value)
+		}
+	}
+	if got := normalizePersonName("  Ma\u2019ruf   Amin "); got != "Ma'ruf Amin" {
+		t.Errorf("normalisasi nama menghasilkan %q", got)
+	}
+	if got := normalizePersonName("Budi Santoso  , S.Kom"); got != "Budi Santoso, S.Kom" {
+		t.Errorf("normalisasi spasi sebelum koma menghasilkan %q", got)
 	}
 }
 

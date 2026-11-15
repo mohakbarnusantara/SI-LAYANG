@@ -16,22 +16,23 @@
     {{if .Error}}<div class="alert alert-error" role="alert">{{.Error}}</div>{{end}}
     {{if eq .Code "login"}}
       <form method="post" action="/login" class="form-stack">
-        <label>Email<input type="email" name="email" placeholder="nama@email.com" autocomplete="email" required></label>
+        <label>Email<input type="email" name="email" placeholder="nama@email.com" autocomplete="email" data-filter="email" required></label>
         <label>Kata sandi<input type="password" name="password" placeholder="Masukkan kata sandi" autocomplete="current-password" required></label>
         <button class="button button-primary button-wide" type="submit">Masuk ke akun <span>→</span></button>
       </form>
       <p class="auth-switch">Belum punya akun? <a href="/register">Daftar sebagai warga</a></p>
       <div class="demo-box"><strong>Akun demo</strong><span>Warga: warga@silayang.local</span><span>Staf: staf@silayang.local</span><span>Lurah: lurah@silayang.local</span><small>Kata sandi akun demo: <code>silayang123</code></small></div>
     {{else}}
-      <form method="post" action="/register" enctype="multipart/form-data" class="form-stack">
-        <label>Nama lengkap sesuai KTP<input type="text" name="name" autocomplete="name" required></label>
-        <div class="form-grid"><label>NIK (16 digit)<input type="text" name="nik" inputmode="numeric" minlength="16" maxlength="16" pattern="[0-9]{16}" required></label><label>Nomor HP / WhatsApp<input type="tel" name="phone" autocomplete="tel" required></label></div>
-        <label>Email aktif<input type="email" name="email" autocomplete="email" required></label>
-        <div class="form-grid"><label>Tempat lahir<input type="text" name="birth_place" autocomplete="off"></label><label>Tanggal lahir<input type="date" name="birth_date" required></label></div>
-        <div class="form-grid"><label>Jenis kelamin<select name="gender" required><option value="">Pilih</option><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></label><label>Pekerjaan<input type="text" name="occupation"></label></div>
+      <div id="register-error" class="alert alert-error" role="alert" hidden></div>
+      <form id="register-form" method="post" action="/register" enctype="multipart/form-data" class="form-stack" novalidate>
+        <label>Nama lengkap sesuai KTP <span class="label-help">(boleh dengan gelar, mis. Budi Santoso, S.Kom.)</span><input type="text" name="name" id="register-name" autocomplete="name" data-filter="person-name" pattern="[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?" title="Nama hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf" required></label>
+        <div class="form-grid"><label>NIK (16 digit)<input type="text" name="nik" inputmode="numeric" minlength="16" maxlength="16" pattern="[0-9]{16}" data-filter="digits" required></label><label>Nomor HP / WhatsApp<input type="tel" name="phone" inputmode="tel" maxlength="16" pattern="^\+?[0-9]{9,15}$" autocomplete="tel" data-filter="phone" required></label></div>
+        <label>Email aktif<input type="email" name="email" autocomplete="email" data-filter="email" required></label>
+        <div class="form-grid"><label>Tempat lahir<input type="text" name="birth_place" autocomplete="off" data-filter="place-name"></label><label>Tanggal lahir<input type="date" name="birth_date" required></label></div>
+        <div class="form-grid"><label>Jenis kelamin<select name="gender" required><option value="">Pilih</option><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></label><label>Pekerjaan<input type="text" name="occupation" data-filter="occupation"></label></div>
         <div class="form-grid"><label>Kecamatan domisili<select name="home_district" id="district-select" required><option value="">Pilih kecamatan</option>{{range .Districts}}<option value="{{.}}" data-neighborhoods="{{join (index $.Neighborhoods .) "|"}}">{{.}}</option>{{end}}</select></label><label>Kelurahan domisili<select name="home_neighborhood" id="neighborhood-select" required disabled><option value="">Pilih kecamatan dahulu</option></select></label></div>
-        <label>Alamat domisili<textarea name="address" rows="2" required></textarea></label>
-        <label>Foto KTP <span class="label-help">(JPG/PNG, maksimal 5 MB)</span><input type="file" name="ktp" accept="image/jpeg,image/png"></label>
+        <label>Alamat domisili<textarea name="address" rows="2" data-filter="address" required></textarea></label>
+        <label>Foto KTP <span class="label-help">(wajib · JPG/PNG, maksimal 5 MB)</span><input type="file" name="ktp" id="register-ktp" accept="image/jpeg,image/png" required></label>
         <label>Kata sandi <span class="label-help">(minimal 8 karakter)</span><input type="password" name="password" minlength="8" autocomplete="new-password" required></label>
         <button class="button button-primary button-wide" type="submit">Daftar akun warga <span>→</span></button>
         <p class="fine-print">Dengan mendaftar, data Anda akan digunakan untuk verifikasi identitas dan pelayanan kelurahan.</p>

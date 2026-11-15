@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -732,10 +733,39 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		Role:             "warga", AccountStatus: "pending", PasswordHash: hashPassword(r.FormValue("password")), CreatedAt: time.Now(),
 	}
 	password := r.FormValue("password")
+	user.Name = normalizePersonName(user.Name)
+	if strings.ContainsAny(user.Name, "0123456789") {
+		a.renderError(w, "register", "Nama lengkap tidak boleh mengandung angka.")
+		return
+	}
+	if user.Name != "" && !validPersonName(user.Name) {
+		a.renderError(w, "register", "Nama lengkap hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf.")
+		return
+	}
 	if len(user.NIK) != 16 || !digitsOnly(user.NIK) || user.Name == "" || user.Email == "" || user.Phone == "" ||
 		user.BirthDate == "" || (user.Gender != "L" && user.Gender != "P") || user.Address == "" ||
 		!validLetterOffice(user.HomeDistrict, user.HomeNeighborhood) || len(password) < 8 {
 		a.renderError(w, "register", "Lengkapi semua data. NIK harus 16 digit dan kata sandi minimal 8 karakter.")
+		return
+	}
+	if !phonePattern.MatchString(user.Phone) {
+		a.renderError(w, "register", "Nomor HP / WhatsApp harus berupa 9–15 digit angka (boleh diawali +).")
+		return
+	}
+	if !emailPattern.MatchString(user.Email) {
+		a.renderError(w, "register", "Format email tidak valid.")
+		return
+	}
+	if user.BirthPlace != "" && !placeNamePattern.MatchString(user.BirthPlace) {
+		a.renderError(w, "register", "Tempat lahir hanya boleh berisi huruf dan tanda baca umum (tanpa angka atau simbol).")
+		return
+	}
+	if user.Occupation != "" && !occupationPattern.MatchString(user.Occupation) {
+		a.renderError(w, "register", "Pekerjaan hanya boleh berisi huruf, spasi, atau tanda /, -, ., ,.")
+		return
+	}
+	if !addressPattern.MatchString(user.Address) {
+		a.renderError(w, "register", "Alamat domisili mengandung karakter yang tidak diizinkan.")
 		return
 	}
 	for _, existing := range a.store.snapshot().Users {
@@ -745,7 +775,11 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	path, err := a.saveUpload(r, "ktp", "image/jpeg", "image/png")
-	if err != nil && !errors.Is(err, http.ErrMissingFile) {
+	if errors.Is(err, http.ErrMissingFile) {
+		a.renderError(w, "register", "Foto KTP wajib diunggah (JPG/PNG, maksimal 5 MB).")
+		return
+	}
+	if err != nil {
 		a.renderError(w, "register", err.Error())
 		return
 	}
@@ -1535,6 +1569,31 @@ func digitsOnly(value string) bool {
 		}
 	}
 	return value != ""
+}
+
+var (
+	// personNamePattern menerima nama sesuai KTP beserta gelar: huruf, spasi tunggal, serta tanda
+	// yang lazim pada nama, yaitu titik setelah huruf (H. Ahmad, S.Kom), koma pemisah gelar setelah
+	// huruf atau titik (Budi, S.Kom., M.T.), apostrof dan tanda hubung yang diapit huruf
+	// (Ma'ruf, Siti-Aminah). Simbol beruntun, angka, dan karakter lain ditolak.
+	personNamePattern = regexp.MustCompile(`^[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?$`)
+	phonePattern      = regexp.MustCompile(`^\+?[0-9]{9,15}$`)
+	emailPattern      = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	placeNamePattern  = regexp.MustCompile(`^[A-Za-z][A-Za-z .,'\-]*$`)
+	occupationPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z ./,\-]*$`)
+	addressPattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 .,\-/'()\r\n]*$`)
+)
+
+// normalizePersonName merapikan spasi berlebih (termasuk spasi sebelum koma)
+// dan menyeragamkan apostrof tipografis.
+func normalizePersonName(value string) string {
+	value = strings.NewReplacer("\u2019", "'", "\u2018", "'", "`", "'").Replace(value)
+	value = strings.Join(strings.Fields(value), " ")
+	return strings.ReplaceAll(value, " ,", ",")
+}
+
+func validPersonName(value string) bool {
+	return personNamePattern.MatchString(value)
 }
 
 func contains(values []string, want string) bool {

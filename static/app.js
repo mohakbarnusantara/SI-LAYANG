@@ -24,6 +24,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const input = field.element;
         if (!input) continue;
         input.value = enabled ? input.dataset[field.profile] || "" : "";
+        input.classList.remove("input-invalid");
+        input.removeAttribute("aria-invalid");
+        input.setCustomValidity("");
       }
     };
     selfToggle.addEventListener("change", () => fillFromProfile(selfToggle.checked));
@@ -53,6 +56,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const key = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
         input.name = `specific_${key}`;
         input.placeholder = `Masukkan ${label.toLowerCase()}`;
+        input.required = true;
+        input.dataset.fieldLabel = label;
         if (input.tagName === "INPUT") input.type = "date";
         else input.rows = 2;
         wrap.append(input);
@@ -115,6 +120,226 @@ document.addEventListener("DOMContentLoaded", () => {
     if (districtSelect.value) populateNeighborhoods(true);
     window.addEventListener("pageshow", () => {
       if (districtSelect.value) populateNeighborhoods(true);
+    });
+  }
+
+  const inputFilters = {
+    "person-name": (value) =>
+      value
+        .replace(/[\u2018\u2019`]/g, "'")
+        .replace(/[^A-Za-z .,'\-]/g, "")
+        .replace(/^[ .,'\-]+/, "")
+        .replace(/([.'\-])[.'\-]+/g, "$1")
+        .replace(/,{2,}/g, ",")
+        .replace(/ +,/g, ",")
+        .replace(/ {2,}/g, " "),
+    digits: (value) => value.replace(/[^0-9]/g, ""),
+    phone: (value) => {
+      const hasPlus = value.startsWith("+");
+      const digits = value.replace(/[^0-9]/g, "").slice(0, 15);
+      return (hasPlus ? "+" : "") + digits;
+    },
+    email: (value) => value.replace(/\s+/g, ""),
+    "place-name": (value) =>
+      value
+        .replace(/[\u2018\u2019`]/g, "'")
+        .replace(/[^A-Za-z .,'\-]/g, "")
+        .replace(/^[ .,'\-]+/, "")
+        .replace(/([.,'\-])[.,'\-]+/g, "$1")
+        .replace(/ {2,}/g, " "),
+    occupation: (value) =>
+      value
+        .replace(/[^A-Za-z ./,\-]/g, "")
+        .replace(/^[ ./,\-]+/, "")
+        .replace(/([./,\-])[./,\-]+/g, "$1")
+        .replace(/ {2,}/g, " "),
+    "alpha-text": (value) =>
+      value
+        .replace(/[\u2018\u2019`]/g, "'")
+        .replace(/[^A-Za-z '\-]/g, "")
+        .replace(/^[ '\-]+/, "")
+        .replace(/(['\-])['\-]+/g, "$1")
+        .replace(/ {2,}/g, " "),
+    address: (value) =>
+      value
+        .replace(/[\u2018\u2019`]/g, "'")
+        .replace(/[^A-Za-z0-9 .,\-/'()\n]/g, "")
+        .replace(/^[ .,\-/'()\n]+/, "")
+        .replace(/ {2,}/g, " "),
+    "letter-number": (value) => value.replace(/[^A-Za-z0-9/.\- ]/g, "").replace(/ {2,}/g, " "),
+    "tracking-code": (value) => value.toUpperCase().replace(/[^A-Z0-9\-]/g, ""),
+  };
+
+  document.querySelectorAll("[data-filter]").forEach((field) => {
+    const sanitize = inputFilters[field.dataset.filter];
+    if (!sanitize) return;
+    field.addEventListener("input", () => {
+      const raw = field.value;
+      const start = field.selectionStart;
+      const cleaned = sanitize(raw);
+      if (cleaned !== raw) {
+        field.value = cleaned;
+        if (typeof start === "number" && field.type !== "email") {
+          const nextPos = sanitize(raw.slice(0, start)).length;
+          field.setSelectionRange(nextPos, nextPos);
+        }
+      }
+      field.setCustomValidity?.("");
+    });
+  });
+
+  const registerForm = document.getElementById("register-form");
+  const registerError = document.getElementById("register-error");
+  const registerName = document.getElementById("register-name");
+  if (registerName) {
+    registerName.addEventListener("invalid", () => {
+      const value = registerName.value.trim();
+      let message = "Nama lengkap wajib diisi.";
+      if (value) {
+        message = /\d/.test(value)
+          ? "Nama lengkap tidak boleh mengandung angka."
+          : "Nama hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf.";
+      }
+      registerName.setCustomValidity(message);
+    });
+  }
+
+  const registerKtp = document.getElementById("register-ktp");
+  if (registerKtp) {
+    registerKtp.addEventListener("change", () => {
+      const file = registerKtp.files?.[0];
+      let message = "";
+      if (file && !["image/jpeg", "image/png"].includes(file.type)) message = "Foto KTP harus berformat JPG atau PNG.";
+      else if (file && file.size > 5 * 1024 * 1024) message = "Ukuran foto KTP maksimal 5 MB.";
+      registerKtp.setCustomValidity(message);
+      if (message) registerKtp.reportValidity();
+    });
+    registerKtp.addEventListener("invalid", () => {
+      if (!registerKtp.files?.length) registerKtp.setCustomValidity("Foto KTP wajib diunggah.");
+    });
+  }
+
+  if (registerForm && registerError) {
+    const nameRegex = /^[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?$/;
+    const setFieldError = (field, message) => {
+      if (!field) return;
+      const label = field.closest("label");
+      const existing = label?.querySelector(".field-error");
+      if (message) {
+        field.classList.add("input-invalid");
+        field.setAttribute("aria-invalid", "true");
+        if (label) {
+          const note = existing || document.createElement("small");
+          note.className = "field-error";
+          note.textContent = message;
+          if (!existing) label.append(note);
+        }
+      } else {
+        field.classList.remove("input-invalid");
+        field.removeAttribute("aria-invalid");
+        existing?.remove();
+      }
+    };
+
+    const validateRegisterField = (field) => {
+      const val = (field.value || "").trim();
+      switch (field.name) {
+        case "name":
+          if (!val) return "Nama lengkap wajib diisi.";
+          if (/\d/.test(val)) return "Nama lengkap tidak boleh mengandung angka.";
+          if (!nameRegex.test(val)) {
+            return "Nama lengkap hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf.";
+          }
+          return "";
+        case "nik":
+          if (!val) return "NIK wajib diisi.";
+          if (!/^\d{16}$/.test(val)) return "NIK harus terdiri dari 16 digit angka.";
+          return "";
+        case "phone":
+          if (!val) return "Nomor HP / WhatsApp wajib diisi.";
+          if (!/^\+?[0-9]{9,15}$/.test(val)) return "Nomor HP / WhatsApp harus berupa 9–15 digit angka (boleh diawali +).";
+          return "";
+        case "email":
+          if (!val) return "Email aktif wajib diisi.";
+          if (field.validity.typeMismatch || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) return "Format email tidak valid.";
+          return "";
+        case "birth_place":
+          if (val && !/[A-Za-z]/.test(val)) return "Tempat lahir harus berisi huruf.";
+          if (val && /[^A-Za-z .,'\-]/.test(val)) return "Tempat lahir hanya boleh berisi huruf dan tanda baca umum.";
+          return "";
+        case "birth_date":
+          return val ? "" : "Tanggal lahir wajib diisi.";
+        case "gender":
+          return val ? "" : "Jenis kelamin wajib dipilih.";
+        case "occupation":
+          if (val && !/[A-Za-z]/.test(val)) return "Pekerjaan harus berisi huruf.";
+          if (val && /[^A-Za-z ./,\-]/.test(val)) return "Pekerjaan hanya boleh berisi huruf, spasi, atau tanda /, -, ., ,.";
+          return "";
+        case "home_district":
+          return val ? "" : "Kecamatan domisili wajib dipilih.";
+        case "home_neighborhood":
+          return val ? "" : "Kelurahan domisili wajib dipilih.";
+        case "address":
+          if (!val) return "Alamat domisili wajib diisi.";
+          if (/[^A-Za-z0-9 .,\-/'()\n\r]/.test(val)) return "Alamat mengandung karakter yang tidak diizinkan.";
+          return "";
+        case "ktp": {
+          const file = field.files?.[0];
+          if (!file) return "Foto KTP wajib diunggah.";
+          if (!["image/jpeg", "image/png"].includes(file.type)) return "Foto KTP harus berformat JPG atau PNG.";
+          if (file.size > 5 * 1024 * 1024) return "Ukuran foto KTP maksimal 5 MB.";
+          return "";
+        }
+        case "password":
+          if (!field.value) return "Kata sandi wajib diisi.";
+          if (field.value.length < 8) return "Kata sandi minimal 8 karakter.";
+          return "";
+        default:
+          return "";
+      }
+    };
+
+    const fields = Array.from(registerForm.querySelectorAll("input, select, textarea"));
+    fields.forEach((field) => {
+      const eventName = field.tagName === "SELECT" || field.type === "file" || field.type === "date" ? "change" : "input";
+      field.addEventListener(eventName, () => {
+        if (field.classList.contains("input-invalid")) {
+          setFieldError(field, validateRegisterField(field));
+        }
+      });
+    });
+
+    registerForm.addEventListener("submit", (event) => {
+      const errors = [];
+      let firstInvalid = null;
+      fields.forEach((field) => {
+        const message = validateRegisterField(field);
+        setFieldError(field, message);
+        if (message) {
+          errors.push(message);
+          if (!firstInvalid) firstInvalid = field;
+        }
+      });
+
+      if (errors.length > 0) {
+        event.preventDefault();
+        registerError.replaceChildren();
+        const title = document.createElement("strong");
+        title.textContent = "Periksa kembali data pendaftaran Anda:";
+        const list = document.createElement("ul");
+        list.className = "alert-list";
+        errors.forEach((msg) => {
+          const item = document.createElement("li");
+          item.textContent = msg;
+          list.append(item);
+        });
+        registerError.append(title, list);
+        registerError.hidden = false;
+        registerError.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        firstInvalid?.focus();
+      } else {
+        registerError.hidden = true;
+      }
     });
   }
 
@@ -202,9 +427,83 @@ document.addEventListener("DOMContentLoaded", () => {
       paper.append(heading, rule, title, number, intro, table, closing, signature);
     };
 
+    const nameRegex = /^[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?$/;
+    const getFieldLabel = (field) => {
+      if (field.dataset.fieldLabel) return field.dataset.fieldLabel;
+      const label = field.closest("label");
+      if (!label) return "ini";
+      const clone = label.cloneNode(true);
+      clone.querySelectorAll("input, select, textarea, .label-help, .field-error").forEach((el) => el.remove());
+      return clone.textContent.trim() || "ini";
+    };
+
+    const getLetterFieldError = (field) => {
+      if (field.disabled || !field.required) return "";
+      const val = (field.value || "").trim();
+      const label = getFieldLabel(field);
+      if (!val) {
+        return field.tagName === "SELECT"
+          ? `Kolom ${label} masih kosong, silakan pilih terlebih dahulu.`
+          : `Kolom ${label} masih kosong, silakan isi terlebih dahulu.`;
+      }
+      if (field.name === "applicant_nama") {
+        if (/\d/.test(val)) return "Nama lengkap tidak boleh mengandung angka.";
+        if (!nameRegex.test(val)) {
+          return "Nama lengkap hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf.";
+        }
+      }
+      if (field.name === "applicant_nik" && !/^\d{16}$/.test(val)) {
+        return "NIK harus terdiri dari 16 digit angka.";
+      }
+      return "";
+    };
+
+    const clearLetterFieldState = (field) => {
+      field.setCustomValidity("");
+      if (field.classList.contains("input-invalid") && !getLetterFieldError(field)) {
+        field.classList.remove("input-invalid");
+        field.removeAttribute("aria-invalid");
+      }
+    };
+
+    letterForm.addEventListener("input", (event) => {
+      if (event.target instanceof HTMLElement) clearLetterFieldState(event.target);
+    });
+    letterForm.addEventListener("change", (event) => {
+      if (event.target instanceof HTMLElement) clearLetterFieldState(event.target);
+    });
+
+    const validateLetterForm = () => {
+      const fields = Array.from(letterForm.querySelectorAll("input, select, textarea"));
+      let firstInvalid = null;
+      fields.forEach((field) => {
+        const message = getLetterFieldError(field);
+        field.setCustomValidity(message);
+        if (message) {
+          field.classList.add("input-invalid");
+          field.setAttribute("aria-invalid", "true");
+          if (!firstInvalid) firstInvalid = field;
+        } else {
+          field.classList.remove("input-invalid");
+          field.removeAttribute("aria-invalid");
+        }
+      });
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstInvalid.focus({ preventScroll: true });
+        firstInvalid.reportValidity();
+        return false;
+      }
+      return true;
+    };
+
+    letterForm.addEventListener("submit", (event) => {
+      if (!validateLetterForm()) event.preventDefault();
+    });
+
     previewButton.addEventListener("click", async () => {
       previewError.hidden = true;
-      if (!letterForm.reportValidity()) return;
+      if (!validateLetterForm()) return;
 
       const data = new FormData(letterForm);
       const additional = {
