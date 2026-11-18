@@ -233,45 +233,6 @@ type LetterOffice struct {
 	Address      string `json:"alamat"`
 }
 
-type DraftPreviewRequest struct {
-	UserID      string            `json:"user_id"`
-	ServiceCode string            `json:"jenis_surat_id"`
-	Additional  map[string]string `json:"data_tambahan"`
-}
-
-type DraftField struct {
-	Label string `json:"label"`
-	Value string `json:"value"`
-}
-
-type DraftData struct {
-	LetterName       string       `json:"jenis_surat"`
-	Header           string       `json:"kop_kelurahan"`
-	District         string       `json:"kecamatan"`
-	Neighborhood     string       `json:"kelurahan"`
-	OfficeName       string       `json:"nama_kantor"`
-	OfficeAddress    string       `json:"alamat_kantor"`
-	OfficeEmail      string       `json:"email_kantor,omitempty"`
-	FullName         string       `json:"nama_lengkap"`
-	NIK              string       `json:"nik"`
-	Birth            string       `json:"tempat_tgl_lahir"`
-	Gender           string       `json:"jenis_kelamin"`
-	Occupation       string       `json:"pekerjaan"`
-	Address          string       `json:"alamat_lengkap"`
-	Purpose          string       `json:"keperluan"`
-	OfficialNumber   string       `json:"nomor_surat"`
-	DraftDate        string       `json:"tanggal_draf"`
-	MayorName        string       `json:"nama_lurah"`
-	MayorNIP         string       `json:"nip_lurah"`
-	AdditionalFields []DraftField `json:"data_tambahan"`
-}
-
-type DraftPreviewResponse struct {
-	Status    string     `json:"status"`
-	Message   string     `json:"message,omitempty"`
-	DraftData *DraftData `json:"draft_data,omitempty"`
-}
-
 type Stats struct {
 	Residents  int
 	Pending    int
@@ -490,9 +451,9 @@ func main() {
 	mux.HandleFunc("POST /register", app.register)
 	mux.HandleFunc("POST /logout", app.logout)
 	mux.HandleFunc("GET /dashboard", app.dashboard)
+	mux.HandleFunc("POST /akun/verifikasi-ulang", app.resubmitVerification)
 	mux.HandleFunc("GET /surat/baru", app.newSuratPage)
 	mux.HandleFunc("POST /surat", app.createSurat)
-	mux.HandleFunc("POST /api/v1/letters/draft-preview", app.draftPreview)
 	mux.HandleFunc("GET /aduan/baru", app.newComplaintPage)
 	mux.HandleFunc("POST /aduan", app.createComplaint)
 	mux.HandleFunc("GET /tracking", app.tracking)
@@ -813,9 +774,14 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	if user == nil {
 		return
 	}
+	a.renderDashboard(w, http.StatusOK, user, dashboardNotice(*user, r.URL.Query().Get("notice")), "")
+}
+
+func (a *App) renderDashboard(w http.ResponseWriter, status int, user *User, notice, errMsg string) {
 	data := PageData{
 		Title: "Ringkasan", User: user, Services: services, Categories: complaintCategories,
-		Notice: dashboardNotice(*user, r.URL.Query().Get("notice")),
+		Districts: letterDistrictNames, Neighborhoods: letterNeighborhoods(),
+		Notice: notice, Error: errMsg,
 	}
 	snapshot := a.store.snapshot()
 	for _, item := range snapshot.Requests {
@@ -849,7 +815,101 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data.Stats.Complaints = len(snapshot.Complaints)
-	a.render(w, http.StatusOK, "dashboard", data)
+	a.render(w, status, "dashboard", data)
+}
+
+func (a *App) resubmitVerification(w http.ResponseWriter, r *http.Request) {
+	user := a.requireUser(w, r)
+	if user == nil {
+		return
+	}
+	if user.Role != "warga" || user.AccountStatus != "ditolak" {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		a.renderDashboard(w, http.StatusBadRequest, user, "", "Data perbaikan tidak valid atau ukuran berkas melebihi 5 MB.")
+		return
+	}
+	updated := *user
+	updated.Name = normalizePersonName(r.FormValue("name"))
+	updated.NIK = strings.TrimSpace(r.FormValue("nik"))
+	updated.Phone = strings.TrimSpace(r.FormValue("phone"))
+	updated.BirthPlace = strings.TrimSpace(r.FormValue("birth_place"))
+	updated.BirthDate = r.FormValue("birth_date")
+	updated.Gender = r.FormValue("gender")
+	updated.Occupation = strings.TrimSpace(r.FormValue("occupation"))
+	updated.HomeDistrict = strings.TrimSpace(r.FormValue("home_district"))
+	updated.HomeNeighborhood = strings.TrimSpace(r.FormValue("home_neighborhood"))
+	updated.Address = strings.TrimSpace(r.FormValue("address"))
+
+	if strings.ContainsAny(updated.Name, "0123456789") {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Nama lengkap tidak boleh mengandung angka.")
+		return
+	}
+	if updated.Name != "" && !validPersonName(updated.Name) {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Nama lengkap hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf.")
+		return
+	}
+	if len(updated.NIK) != 16 || !digitsOnly(updated.NIK) || updated.Name == "" || updated.Phone == "" ||
+		updated.BirthDate == "" || (updated.Gender != "L" && updated.Gender != "P") || updated.Address == "" ||
+		!validLetterOffice(updated.HomeDistrict, updated.HomeNeighborhood) {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Lengkapi semua data wajib sesuai KTP. NIK harus 16 digit angka.")
+		return
+	}
+	if !phonePattern.MatchString(updated.Phone) {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Nomor HP / WhatsApp harus berupa 9–15 digit angka (boleh diawali +).")
+		return
+	}
+	if updated.BirthPlace != "" && !placeNamePattern.MatchString(updated.BirthPlace) {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Tempat lahir hanya boleh berisi huruf dan tanda baca umum (tanpa angka atau simbol).")
+		return
+	}
+	if updated.Occupation != "" && !occupationPattern.MatchString(updated.Occupation) {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Pekerjaan hanya boleh berisi huruf, spasi, atau tanda /, -, ., ,.")
+		return
+	}
+	if !addressPattern.MatchString(updated.Address) {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Alamat domisili mengandung karakter yang tidak diizinkan.")
+		return
+	}
+	for _, existing := range a.store.snapshot().Users {
+		if existing.ID != user.ID && existing.NIK == updated.NIK {
+			a.renderDashboard(w, http.StatusBadRequest, &updated, "", "NIK sudah digunakan oleh akun lain.")
+			return
+		}
+	}
+	path, err := a.saveUpload(r, "ktp", "image/jpeg", "image/png")
+	if errors.Is(err, http.ErrMissingFile) {
+		if updated.KTPPath == "" {
+			a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Foto KTP wajib diunggah (JPG/PNG, maksimal 5 MB).")
+			return
+		}
+	} else if err != nil {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", err.Error())
+		return
+	} else {
+		updated.KTPPath = path
+	}
+	updated.AccountStatus = "pending"
+	updated.RejectionReason = ""
+	if err := a.store.update(func(db *database) error {
+		for _, existing := range db.Users {
+			if existing.ID != user.ID && existing.NIK == updated.NIK {
+				return errors.New("NIK sudah digunakan oleh akun lain")
+			}
+		}
+		current, ok := db.Users[user.ID]
+		if !ok || current.AccountStatus != "ditolak" {
+			return errors.New("akun tidak dalam status ditolak")
+		}
+		db.Users[user.ID] = updated
+		return nil
+	}); err != nil {
+		a.renderDashboard(w, http.StatusBadRequest, &updated, "", "Gagal menyimpan perbaikan: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, "/dashboard?notice=reverification-submitted", http.StatusSeeOther)
 }
 
 func (a *App) newSuratPage(w http.ResponseWriter, r *http.Request) {
@@ -942,99 +1002,6 @@ func (a *App) createSurat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/dashboard?notice=request-created", http.StatusSeeOther)
-}
-
-func (a *App) draftPreview(w http.ResponseWriter, r *http.Request) {
-	writeJSON := func(status int, response DraftPreviewResponse) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			log.Printf("menulis respons pratinjau draf: %v", err)
-		}
-	}
-	user := a.currentUser(r)
-	if user == nil {
-		writeJSON(http.StatusUnauthorized, DraftPreviewResponse{Status: "error", Message: "Silakan masuk untuk membuat pratinjau surat."})
-		return
-	}
-	if user.Role != "warga" || user.AccountStatus != "aktif" {
-		writeJSON(http.StatusForbidden, DraftPreviewResponse{Status: "error", Message: "Hanya akun warga terverifikasi yang dapat membuat pratinjau surat."})
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	var input DraftPreviewRequest
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeJSON(http.StatusBadRequest, DraftPreviewResponse{Status: "error", Message: "Data pratinjau tidak valid."})
-		return
-	}
-	if input.UserID == "" || input.UserID != user.ID {
-		writeJSON(http.StatusForbidden, DraftPreviewResponse{Status: "error", Message: "ID warga tidak sesuai dengan akun yang sedang masuk."})
-		return
-	}
-	service := serviceByCode(input.ServiceCode)
-	if service == nil {
-		writeJSON(http.StatusBadRequest, DraftPreviewResponse{Status: "error", Message: "Jenis surat tidak tersedia."})
-		return
-	}
-	district := strings.TrimSpace(input.Additional["kecamatan"])
-	neighborhood := strings.TrimSpace(input.Additional["kelurahan"])
-	office, ok := letterOffice(district, neighborhood)
-	if !ok {
-		writeJSON(http.StatusBadRequest, DraftPreviewResponse{Status: "error", Message: "Pilih kecamatan dan kelurahan yang valid."})
-		return
-	}
-	purpose := strings.TrimSpace(input.Additional["keperluan"])
-	if purpose == "" {
-		writeJSON(http.StatusUnprocessableEntity, DraftPreviewResponse{Status: "error", Message: "Tujuan atau keperluan surat wajib diisi."})
-		return
-	}
-
-	isSelf := input.Additional["is_self"] != "false"
-	name, nik := user.Name, user.NIK
-	birthPlace, birthDate, gender := user.BirthPlace, user.BirthDate, user.Gender
-	address, occupation := user.Address, user.Occupation
-	if !isSelf {
-		name = strings.TrimSpace(input.Additional["pemohon_nama"])
-		nik = strings.TrimSpace(input.Additional["pemohon_nik"])
-		birthPlace = strings.TrimSpace(input.Additional["pemohon_tempat_lahir"])
-		birthDate = strings.TrimSpace(input.Additional["pemohon_tanggal_lahir"])
-		gender = strings.TrimSpace(input.Additional["pemohon_jenis_kelamin"])
-		address = strings.TrimSpace(input.Additional["pemohon_alamat"])
-		occupation = strings.TrimSpace(input.Additional["pemohon_pekerjaan"])
-	} else if occupation == "" {
-		occupation = strings.TrimSpace(input.Additional["pekerjaan"])
-	}
-	if name == "" || len(nik) != 16 || !digitsOnly(nik) {
-		writeJSON(http.StatusUnprocessableEntity, DraftPreviewResponse{Status: "error", Message: "Nama pemohon dan NIK 16 digit wajib tersedia."})
-		return
-	}
-	if occupation == "" {
-		writeJSON(http.StatusUnprocessableEntity, DraftPreviewResponse{Status: "error", Message: "Pekerjaan belum diisi. Masukkan pekerjaan untuk melanjutkan pratinjau."})
-		return
-	}
-
-	genderName := map[string]string{"L": "Laki-laki", "P": "Perempuan"}[gender]
-	if genderName == "" {
-		genderName = gender
-	}
-	birth := formatBirth(birthPlace, birthDate)
-	var additionalFields []DraftField
-	for _, field := range service.Fields {
-		if value := strings.TrimSpace(input.Additional["specific_"+fieldKey(field)]); value != "" {
-			additionalFields = append(additionalFields, DraftField{Label: field, Value: value})
-		}
-	}
-	now := time.Now()
-	draft := DraftData{
-		LetterName: service.Name,
-		Header:     fmt.Sprintf("PEMERINTAH KOTA PALU\nKECAMATAN %s\nKELURAHAN %s\n%s", strings.ToUpper(district), strings.ToUpper(neighborhood), officeLetterAddress(office)),
-		District:   district, Neighborhood: neighborhood, OfficeName: office.Name, OfficeAddress: office.Address, OfficeEmail: officeLetterEmail(office),
-		FullName: name, NIK: nik, Birth: birth,
-		Gender: genderName, Occupation: occupation, Address: address, Purpose: purpose, OfficialNumber: "",
-		DraftDate: formatDateID(now), MayorName: office.Mayor, MayorNIP: "000000000000000000 (DUMMY)",
-		AdditionalFields: additionalFields,
-	}
-	writeJSON(http.StatusOK, DraftPreviewResponse{Status: "success", DraftData: &draft})
 }
 
 func (a *App) newComplaintPage(w http.ResponseWriter, r *http.Request) {
@@ -1296,7 +1263,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	snapshot := a.store.snapshot()
 	allowed := false
 	for _, owner := range snapshot.Users {
-		if owner.KTPPath == targetPath && residentBelongsToOffice(*user, owner) {
+		if owner.KTPPath == targetPath && (owner.ID == user.ID || residentBelongsToOffice(*user, owner)) {
 			allowed = true
 			break
 		}
@@ -1526,26 +1493,6 @@ func trackingCode(prefix string) string {
 	return fmt.Sprintf("%s-%s-%s", prefix, time.Now().Format("20060102"), strings.ToUpper(randomID()[:6]))
 }
 
-func formatDateID(value time.Time) string {
-	months := [...]string{"Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"}
-	return fmt.Sprintf("%02d %s %04d", value.Day(), months[int(value.Month())-1], value.Year())
-}
-
-func formatBirth(place, date string) string {
-	formattedDate := strings.TrimSpace(date)
-	if parsed, err := time.Parse("2006-01-02", formattedDate); err == nil {
-		formattedDate = formatDateID(parsed)
-	}
-	if formattedDate == "" {
-		formattedDate = "Belum diisi"
-	}
-	place = strings.TrimSpace(place)
-	if place == "" {
-		return formattedDate
-	}
-	return place + ", " + formattedDate
-}
-
 func randomID() string {
 	value, err := randomHex(16)
 	if err != nil {
@@ -1607,18 +1554,19 @@ func contains(values []string, want string) bool {
 
 func noticeFor(code string) string {
 	notices := map[string]string{
-		"pending":            "Pendaftaran berhasil. Akun Anda menunggu verifikasi staf kelurahan.",
-		"request-created":    "Permohonan surat berhasil dikirim. Simpan kode tracking untuk memantau proses.",
-		"complaint-created":  "Aduan berhasil dikirim. Simpan kode tracking untuk melihat tindak lanjut.",
-		"resident-reviewed":  "Verifikasi akun warga berhasil diperbarui.",
-		"request-reviewed":   "Status permohonan surat berhasil diperbarui.",
-		"complaint-reviewed": "Tindak lanjut aduan berhasil diperbarui.",
+		"pending":                  "Pendaftaran berhasil. Akun Anda menunggu verifikasi staf kelurahan.",
+		"reverification-submitted": "Perbaikan data berhasil dikirim. Akun Anda kembali menunggu verifikasi staf kelurahan.",
+		"request-created":          "Permohonan surat berhasil dikirim. Simpan kode tracking untuk memantau proses.",
+		"complaint-created":        "Aduan berhasil dikirim. Simpan kode tracking untuk melihat tindak lanjut.",
+		"resident-reviewed":        "Verifikasi akun warga berhasil diperbarui.",
+		"request-reviewed":         "Status permohonan surat berhasil diperbarui.",
+		"complaint-reviewed":       "Tindak lanjut aduan berhasil diperbarui.",
 	}
 	return notices[code]
 }
 
 func dashboardNotice(user User, code string) string {
-	if code != "pending" || user.Role != "warga" {
+	if (code != "pending" && code != "reverification-submitted") || user.Role != "warga" {
 		return noticeFor(code)
 	}
 	switch user.AccountStatus {

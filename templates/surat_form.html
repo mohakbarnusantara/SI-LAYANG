@@ -25,13 +25,7 @@
     <label>Nomor surat pengantar RT<input type="text" name="rt_letter_number" data-filter="letter-number" placeholder="Contoh: 012/RT-04/VI/2026" required></label>
     <div class="form-grid"><label>Scan surat pengantar RT <span class="label-help">(JPG, PNG, atau PDF · maks. 5 MB)</span><input type="file" name="rt_attachment" accept="image/jpeg,image/png,application/pdf"></label><label id="extra-doc-label">Berkas tambahan <span class="label-help">(jika dipersyaratkan · maks. 5 MB)</span><input type="file" name="extra_attachment" accept="image/jpeg,image/png,application/pdf"></label></div>
     <div class="form-note"><span>ⓘ</span><p>Pastikan informasi sesuai dokumen pendukung. Petugas dapat meminta perbaikan jika ada data yang belum lengkap.</p></div>
-    <div class="form-actions"><a href="/dashboard" class="button button-outline">Batal</a><button class="button button-outline" id="preview-draft" type="button">Pratinjau draf</button><button class="button button-primary" type="submit">Kirim permohonan <span>→</span></button></div>
+    <div class="form-actions"><a href="/dashboard" class="button button-outline">Batal</a><button class="button button-primary" type="submit">Kirim permohonan <span>→</span></button></div>
   </form>
-  <section id="draft-preview" class="draft-preview" hidden aria-live="polite">
-    <header class="draft-toolbar"><div><a class="button button-outline" href="/dashboard">Kembali ke Riwayat</a><button id="back-to-form" class="button button-outline" type="button">Kembali ke Formulir</button></div><button id="download-draft" class="button button-dark" type="button">Unduh PDF</button></header>
-    <div class="draft-banner">Dokumen ini digenerate otomatis berdasarkan data e-KTP Anda. Perubahan data surat hanya dapat dilakukan oleh Staf Kelurahan.</div>
-    <p id="draft-error" class="alert alert-error" hidden role="alert"></p>
-    <article id="draft-paper" class="draft-paper" aria-label="Pratinjau draf surat"></article>
-  </section>
 </div>
 {{end}}

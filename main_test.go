@@ -652,68 +652,6 @@ func TestApprovedDocumentShowsDummyQRAndNIPWithoutVerificationCode(t *testing.T)
 	}
 }
 
-func TestDraftPreviewUsesVerifiedUserAndSelectedLocation(t *testing.T) {
-	store, err := openStore(filepath.Join(t.TempDir(), "data.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	user := User{
-		ID: "citizen-1", Name: "Contoh Warga", NIK: "1234567890123456", BirthPlace: "Palu",
-		BirthDate: "1990-01-02", Gender: "P", Occupation: "Guru", Address: "Jalan Contoh",
-		Role: "warga", AccountStatus: "aktif",
-	}
-	mayor := User{ID: "mayor-1", Name: "Contoh Lurah", Role: "lurah"}
-	if err := store.update(func(db *database) error {
-		db.Users[user.ID] = user
-		db.Users[mayor.ID] = mayor
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	app := &App{store: store, secret: []byte("test-secret")}
-	cookieResponse := httptest.NewRecorder()
-	if err := app.setSession(cookieResponse, user.ID); err != nil {
-		t.Fatal(err)
-	}
-	body := `{"user_id":"citizen-1","jenis_surat_id":"SK-AHLI-WARIS","data_tambahan":{"kecamatan":"Mantikulore","kelurahan":"Talise","keperluan":"Administrasi keluarga","specific_hubungan_keluarga":"anak"}}`
-	request := httptest.NewRequest("POST", "/api/v1/letters/draft-preview", strings.NewReader(body))
-	request.AddCookie(cookieResponse.Result().Cookies()[0])
-	response := httptest.NewRecorder()
-
-	app.draftPreview(response, request)
-
-	if response.Code != 200 {
-		t.Fatalf("status pratinjau = %d, ingin 200: %s", response.Code, response.Body.String())
-	}
-	var result DraftPreviewResponse
-	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	if result.Status != "success" || result.DraftData == nil {
-		t.Fatalf("respons pratinjau tidak berhasil: %#v", result)
-	}
-	draft := result.DraftData
-	if draft.District != "Mantikulore" || draft.Neighborhood != "Talise" ||
-		draft.OfficeName != "Kantor Kelurahan Talise" ||
-		!strings.Contains(draft.Header, "KELURAHAN TALISE") {
-		t.Errorf("kop tidak memakai wilayah pilihan: %#v", draft)
-	}
-	if draft.OfficeAddress != "Jl. Letjend Suprapto No.11, Talise, Kec. Mantikulore, Kota Palu, Sulawesi Tengah 94118" ||
-		!strings.Contains(draft.Header, draft.OfficeAddress) {
-		t.Errorf("kop tidak memakai alamat kantor dari data wilayah: %#v", draft)
-	}
-	if draft.FullName != user.Name || draft.NIK != user.NIK || draft.Birth != "Palu, 02 Januari 1990" {
-		t.Errorf("data profil tidak terpetakan: %#v", draft)
-	}
-	if draft.Purpose != "Administrasi keluarga" || draft.Occupation != "Guru" ||
-		draft.OfficialNumber != "" || draft.MayorName != "Mohamad Iqbal, S.H., M.H" || !strings.Contains(draft.MayorNIP, "DUMMY") {
-		t.Errorf("field draf tidak sesuai: %#v", draft)
-	}
-	if len(draft.AdditionalFields) != 1 || draft.AdditionalFields[0].Label != "Hubungan keluarga" {
-		t.Errorf("data tambahan surat tidak terpetakan: %#v", draft.AdditionalFields)
-	}
-}
-
 func TestLetterOfficeDirectoryHasUniqueAreas(t *testing.T) {
 	if len(letterOffices) != 32 {
 		t.Fatalf("jumlah kantor kelurahan = %d, ingin 32 dari spreadsheet", len(letterOffices))
@@ -736,48 +674,74 @@ func TestLetterOfficeDirectoryHasUniqueAreas(t *testing.T) {
 	}
 }
 
-func TestDraftPreviewRejectsUnverifiedAndMismatchedAccounts(t *testing.T) {
+func TestSuratFormDoesNotExposeDraftPreviewToCitizens(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("templates", "surat_form.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, forbidden := range []string{"preview-draft", "draft-preview", "Pratinjau draf", "draft-paper"} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf("formulir surat masih menampilkan pratinjau draf (%q)", forbidden)
+		}
+	}
+}
+
+func TestRejectedResidentCanResubmitVerification(t *testing.T) {
 	store, err := openStore(filepath.Join(t.TempDir(), "data.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	user := User{ID: "citizen-1", Role: "warga", AccountStatus: "pending"}
+	user := User{
+		ID: "rejected-1", NIK: "7271010101900099", Name: "Warga Lama",
+		Email: "rejected@example.test", Phone: "081234567890", BirthPlace: "Palu",
+		BirthDate: "1990-01-01", Gender: "L", Occupation: "Wiraswasta",
+		HomeDistrict: "Palu Selatan", HomeNeighborhood: "Tatura Utara",
+		Address: "Jl. Anoa Lama", Role: "warga", AccountStatus: "ditolak",
+		RejectionReason: "Foto KTP buram dan nama belum sesuai",
+	}
 	if err := store.update(func(db *database) error {
 		db.Users[user.ID] = user
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{store: store, secret: []byte("test-secret")}
-	cookieResponse := httptest.NewRecorder()
-	if err := app.setSession(cookieResponse, user.ID); err != nil {
+	app := &App{
+		store: store, secret: []byte("test-secret"), uploadDir: t.TempDir(),
+		templates: template.Must(template.New("dashboard").Parse(`{{define "dashboard"}}{{.Error}}|{{.Notice}}{{end}}`)),
+	}
+	cookieRec := httptest.NewRecorder()
+	if err := app.setSession(cookieRec, user.ID); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"user_id":"another-user","jenis_surat_id":"SK-AHLI-WARIS","data_tambahan":{}}`
-	request := httptest.NewRequest("POST", "/api/v1/letters/draft-preview", strings.NewReader(body))
-	request.AddCookie(cookieResponse.Result().Cookies()[0])
-	response := httptest.NewRecorder()
+	sessionCookie := cookieRec.Result().Cookies()[0]
 
-	app.draftPreview(response, request)
-
-	if response.Code != 403 {
-		t.Fatalf("status akun belum terverifikasi = %d, ingin 403", response.Code)
+	// 1. Jika tidak ada KTP sama sekali dan tidak mengunggah KTP baru -> ditolak
+	fields := validRegisterFields()
+	fields["name"] = "Warga Perbaikan, S.Kom."
+	badReq := registerRequest(t, fields, false)
+	badReq.URL.Path = "/akun/verifikasi-ulang"
+	badReq.AddCookie(sessionCookie)
+	badRes := httptest.NewRecorder()
+	app.resubmitVerification(badRes, badReq)
+	if badRes.Code != http.StatusBadRequest || !strings.Contains(badRes.Body.String(), "Foto KTP wajib diunggah") {
+		t.Fatalf("seharusnya gagal tanpa KTP: code=%d body=%q", badRes.Code, badRes.Body.String())
 	}
 
-	if err := store.update(func(db *database) error {
-		current := db.Users[user.ID]
-		current.AccountStatus = "aktif"
-		db.Users[user.ID] = current
-		return nil
-	}); err != nil {
-		t.Fatal(err)
+	// 2. Mengirim perbaikan lengkap dengan foto KTP -> status kembali pending & alasan bersih
+	goodReq := registerRequest(t, fields, true)
+	goodReq.URL.Path = "/akun/verifikasi-ulang"
+	goodReq.AddCookie(sessionCookie)
+	goodRes := httptest.NewRecorder()
+	app.resubmitVerification(goodRes, goodReq)
+	if goodRes.Code != http.StatusSeeOther {
+		t.Fatalf("verifikasi ulang gagal: code=%d body=%q", goodRes.Code, goodRes.Body.String())
 	}
-	mismatchedBody := `{"user_id":"another-user","jenis_surat_id":"SK-AHLI-WARIS","data_tambahan":{}}`
-	mismatchedRequest := httptest.NewRequest("POST", "/api/v1/letters/draft-preview", strings.NewReader(mismatchedBody))
-	mismatchedRequest.AddCookie(cookieResponse.Result().Cookies()[0])
-	mismatchedResponse := httptest.NewRecorder()
-	app.draftPreview(mismatchedResponse, mismatchedRequest)
-	if mismatchedResponse.Code != 403 {
-		t.Fatalf("status ID pengguna yang tidak sesuai = %d, ingin 403", mismatchedResponse.Code)
+	updated := store.snapshot().Users[user.ID]
+	if updated.AccountStatus != "pending" || updated.RejectionReason != "" {
+		t.Fatalf("status akun setelah verifikasi ulang = %q (alasan %q), ingin pending", updated.AccountStatus, updated.RejectionReason)
+	}
+	if updated.Name != "Warga Perbaikan, S.Kom." || updated.KTPPath == "" {
+		t.Fatalf("data perbaikan tidak tersimpan: %#v", updated)
 	}
 }
