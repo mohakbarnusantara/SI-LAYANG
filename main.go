@@ -270,7 +270,11 @@ var services = []Service{
 	{"SK-EKONOMI-LEMAH", "Usaha & Ekonomi", "Surat Keterangan Ekonomi Lemah", []string{"Tanggal SK penetapan (opsional)"}, ""},
 	{"SK-EKONOMI-LEMAH-NON-DTKSP", "Usaha & Ekonomi", "Surat Keterangan Ekonomi Lemah (Belum DTKSP)", []string{"Status perkawinan", "Maksud dan tujuan"}, ""},
 	{"SK-PENUTUPAN-USAHA", "Usaha & Ekonomi", "Surat Keterangan Penutupan Usaha", []string{"Jenis usaha", "Alamat usaha", "Tahun penutupan", "No. surat penutupan", "Tanggal surat penutupan"}, "Surat pengantar penutupan usaha"},
-	{"SK-PENGHASILAN", "Usaha & Ekonomi", "Surat Keterangan Penghasilan", []string{"Data anak (nama, NIK, TTL, status, pekerjaan, alamat)", "Penghasilan rata-rata", "Sumber penghasilan"}, ""},
+	{"SK-PENGHASILAN", "Usaha & Ekonomi", "Surat Keterangan Penghasilan", []string{
+		"Nama Anak", "Jenis Kelamin Anak", "Tempat Lahir Anak", "Tanggal Lahir Anak",
+		"Agama Anak", "Status Perkawinan Anak", "NIK Anak", "Pekerjaan Anak", "Alamat Anak",
+		"Penghasilan Rata-Rata", "Sumber Penghasilan",
+	}, ""},
 	{"SK-USAHA", "Usaha & Ekonomi", "Surat Keterangan Usaha", []string{"Nama usaha", "Tahun berdiri", "Nomor WA"}, ""},
 }
 
@@ -941,6 +945,9 @@ func (a *App) createSurat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	purpose := strings.TrimSpace(r.FormValue("keperluan"))
+	if purpose == "" && service.Code == "SK-PENGHASILAN" {
+		purpose = "Surat Keterangan Penghasilan Orang Tua"
+	}
 	if purpose == "" {
 		a.renderFormError(w, "surat_form", "Tujuan atau keperluan surat wajib diisi.", user)
 		return
@@ -951,22 +958,39 @@ func (a *App) createSurat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applicant := make(map[string]string)
-	for _, key := range []string{"nama", "nik", "tempat_lahir", "tanggal_lahir", "jenis_kelamin", "agama", "kewarganegaraan", "pekerjaan", "alamat"} {
+	for _, key := range []string{"nama", "nik", "tempat_lahir", "tanggal_lahir", "jenis_kelamin", "agama", "status_perkawinan", "kewarganegaraan", "pekerjaan", "alamat"} {
 		value := strings.TrimSpace(r.FormValue("applicant_" + key))
 		if value != "" {
 			applicant[key] = value
 		}
 	}
+	if applicant["kewarganegaraan"] == "" {
+		applicant["kewarganegaraan"] = "Indonesia"
+	}
 	if r.FormValue("is_self") == "true" {
-		applicant["nama"], applicant["nik"], applicant["tempat_lahir"], applicant["tanggal_lahir"], applicant["jenis_kelamin"], applicant["pekerjaan"], applicant["alamat"] =
-			user.Name, user.NIK, user.BirthPlace, user.BirthDate, user.Gender, user.Occupation, user.Address
+		applicant["nama"], applicant["nik"], applicant["tempat_lahir"], applicant["tanggal_lahir"], applicant["pekerjaan"], applicant["alamat"] =
+			user.Name, user.NIK, user.BirthPlace, user.BirthDate, user.Occupation, user.Address
+		if user.Gender == "L" {
+			applicant["jenis_kelamin"] = "Laki-laki"
+		} else if user.Gender == "P" {
+			applicant["jenis_kelamin"] = "Perempuan"
+		} else if applicant["jenis_kelamin"] == "" {
+			applicant["jenis_kelamin"] = user.Gender
+		}
 		if applicant["pekerjaan"] == "" {
 			applicant["pekerjaan"] = strings.TrimSpace(r.FormValue("applicant_pekerjaan"))
 		}
 	}
-	if applicant["nama"] == "" || len(applicant["nik"]) != 16 || !digitsOnly(applicant["nik"]) {
-		a.renderFormError(w, "surat_form", "Nama dan NIK subjek surat wajib diisi; NIK harus 16 digit.", user)
-		return
+	if service.Code == "SK-PENGHASILAN" {
+		if applicant["nama"] == "" || applicant["nik"] == "" || len(applicant["nik"]) > 16 {
+			a.renderFormError(w, "surat_form", "Nama dan NIK orang tua wajib diisi (maks. 16 karakter).", user)
+			return
+		}
+	} else {
+		if applicant["nama"] == "" || len(applicant["nik"]) != 16 || !digitsOnly(applicant["nik"]) {
+			a.renderFormError(w, "surat_form", "Nama dan NIK subjek surat wajib diisi; NIK harus 16 digit.", user)
+			return
+		}
 	}
 	specific := map[string]string{}
 	for _, field := range service.Fields {

@@ -745,3 +745,128 @@ func TestRejectedResidentCanResubmitVerification(t *testing.T) {
 		t.Fatalf("data perbaikan tidak tersimpan: %#v", updated)
 	}
 }
+
+func TestIncomeLetterFieldsAndRendering(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "data.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := User{
+		ID: "user-income", NIK: "7271010101900001", Name: "Orang Tua Kandung",
+		Role: "warga", AccountStatus: "aktif",
+	}
+	if err := store.update(func(db *database) error {
+		db.Users[user.ID] = user
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{
+		store: store, secret: []byte("test-secret"), uploadDir: t.TempDir(),
+		templates: template.Must(template.New("surat_form").Parse(`{{define "surat_form"}}{{.Error}}{{end}}`)),
+	}
+	cookieRec := httptest.NewRecorder()
+	if err := app.setSession(cookieRec, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	sessionCookie := cookieRec.Result().Cookies()[0]
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	formValues := map[string]string{
+		"service_code":                     "SK-PENGHASILAN",
+		"kecamatan":                        "Mantikulore",
+		"kelurahan":                        "Talise",
+		"applicant_nama":                   "Budi Santoso",
+		"applicant_jenis_kelamin":          "Laki-laki",
+		"applicant_tempat_lahir":           "Palu",
+		"applicant_tanggal_lahir":          "1978-05-12",
+		"applicant_agama":                  "Islam",
+		"applicant_status_perkawinan":      "Kawin",
+		"applicant_nik":                    "7271010101780001",
+		"applicant_pekerjaan":              "Wiraswasta",
+		"applicant_alamat":                 "Jl. Diponegoro No. 10",
+		"specific_nama_anak":               "Ahmad Fadilah",
+		"specific_jenis_kelamin_anak":      "Laki-laki",
+		"specific_tempat_lahir_anak":       "Palu",
+		"specific_tanggal_lahir_anak":      "2005-08-20",
+		"specific_agama_anak":              "Islam",
+		"specific_status_perkawinan_anak":  "Belum Kawin",
+		"specific_nik_anak":                "7271010101050002",
+		"specific_pekerjaan_anak":          "Pelajar/Mahasiswa",
+		"specific_alamat_anak":             "Jl. Diponegoro No. 10",
+		"specific_penghasilan_rata_rata":   "3500000",
+		"specific_sumber_penghasilan":      "Perdagangan Sembako",
+		"rt_letter_number":                 "012/RT-01/VI/2026",
+	}
+	for k, v := range formValues {
+		if err := writer.WriteField(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	part, err := writer.CreateFormFile("rt_attachment", "pengantar.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	part.Write([]byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRdummy"))
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/surat", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.AddCookie(sessionCookie)
+	rec := httptest.NewRecorder()
+	app.createSurat(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("createSurat SK-PENGHASILAN gagal: code=%d body=%q", rec.Code, rec.Body.String())
+	}
+
+	snap := store.snapshot()
+	var created SuratRequest
+	for _, r := range snap.Requests {
+		if r.ServiceCode == "SK-PENGHASILAN" {
+			created = r
+			break
+		}
+	}
+	if created.ID == "" {
+		t.Fatal("request SK-PENGHASILAN tidak ditemukan di database")
+	}
+	if created.Applicant["nama"] != "Budi Santoso" || created.Applicant["status_perkawinan"] != "Kawin" {
+		t.Fatalf("applicant data salah: %#v", created.Applicant)
+	}
+	if created.Specific["Nama Anak"] != "Ahmad Fadilah" || created.Specific["Penghasilan Rata-Rata"] != "3500000" {
+		t.Fatalf("specific data salah: %#v", created.Specific)
+	}
+
+	// Cek render document.html
+	docTmpl, err := template.New("document").Funcs(template.FuncMap{
+		"date": func(value time.Time) string { return value.Format("02 Jan 2006, 15:04") },
+	}).ParseFiles(filepath.Join("templates", "document.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var docBuf bytes.Buffer
+	docData := struct {
+		Request     SuratRequest
+		IsDraft     bool
+		VerifyURL   string
+		Office      LetterOffice
+		OfficeEmail string
+	}{
+		Request: created,
+		Office:  LetterOffice{District: "Mantikulore", Neighborhood: "Talise", Address: "Jl. Talise", Mayor: "Lurah Talise"},
+	}
+	if err := docTmpl.ExecuteTemplate(&docBuf, "document", docData); err != nil {
+		t.Fatal(err)
+	}
+	docStr := docBuf.String()
+	for _, expected := range []string{
+		"I. Data Orang Tua / Wali:", "Budi Santoso", "Kawin",
+		"II. Data Anak:", "Ahmad Fadilah", "Pelajar/Mahasiswa",
+		"III. Data Penghasilan:", "3500000", "Perdagangan Sembako",
+	} {
+		if !strings.Contains(docStr, expected) {
+			t.Errorf("document.html tidak memuat %q", expected)
+		}
+	}
+}

@@ -12,18 +12,126 @@
     <div class="form-section-title form-section-spaced"><span>02</span><div><h2>Jenis layanan</h2><p>Pilih surat yang sesuai dengan kebutuhan Anda.</p></div></div>
     <label>Jenis surat<select name="service_code" id="service-select" required><option value="">Pilih layanan surat</option>{{range .Services}}<option value="{{.Code}}" data-fields="{{range .Fields}}{{.}}|{{end}}" data-extra="{{.ExtraDoc}}">{{.Category}} — {{.Name}}</option>{{end}}</select></label>
     <div id="service-hint" class="inline-hint">Setiap layanan dapat meminta data khusus dan berkas pendukung.</div>
-    <div class="form-section-title form-section-spaced"><span>03</span><div><h2>Data subjek surat</h2><p>Isi data orang yang tercantum pada surat.</p></div></div>
-    <label class="checkbox-row"><input id="is-self" type="checkbox" name="is_self" value="true" checked><span><strong>Ajukan untuk diri sendiri</strong><small>Data profil Anda akan digunakan otomatis.</small></span></label>
-    <div class="form-grid"><label>Nama lengkap<input type="text" name="applicant_nama" data-profile-name="{{.User.Name}}" data-filter="person-name" pattern="[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?" value="{{.User.Name}}" required></label><label>NIK (16 digit)<input type="text" name="applicant_nik" data-profile-nik="{{.User.NIK}}" value="{{.User.NIK}}" inputmode="numeric" minlength="16" maxlength="16" pattern="[0-9]{16}" data-filter="digits" required></label></div>
-    <div class="form-grid"><label>Tempat lahir<input type="text" name="applicant_tempat_lahir" data-profile-birth-place="{{.User.BirthPlace}}" data-filter="place-name" value="{{.User.BirthPlace}}" required></label><label>Tanggal lahir<input type="date" name="applicant_tanggal_lahir" data-profile-birth="{{.User.BirthDate}}" value="{{.User.BirthDate}}" required></label></div>
-    <div class="form-grid"><label>Jenis kelamin<select name="applicant_jenis_kelamin" data-profile-gender="{{.User.Gender}}" required><option value="">Pilih</option><option value="L" {{if eq .User.Gender "L"}}selected{{end}}>Laki-laki</option><option value="P" {{if eq .User.Gender "P"}}selected{{end}}>Perempuan</option></select></label><label>Pekerjaan<input type="text" name="applicant_pekerjaan" data-profile-occupation="{{.User.Occupation}}" data-filter="occupation" value="{{.User.Occupation}}" required></label></div>
-    <div class="form-grid"><label>Agama<input type="text" name="applicant_agama" data-filter="alpha-text" placeholder="Contoh: Islam" required></label><label>Kewarganegaraan<input type="text" name="applicant_kewarganegaraan" data-filter="alpha-text" value="Indonesia" required></label></div>
-    <label>Alamat<textarea name="applicant_alamat" rows="2" data-profile-address="{{.User.Address}}" data-filter="address" required>{{.User.Address}}</textarea></label>
-    <label>Tujuan / keperluan surat<textarea name="keperluan" rows="2" placeholder="Jelaskan tujuan penggunaan surat" required></textarea></label>
-    <div class="specific-fields" id="specific-fields"></div>
-    <div class="form-section-title form-section-spaced"><span>04</span><div><h2>Surat pengantar & lampiran</h2><p>Unggah berkas pendukung yang diminta untuk layanan ini.</p></div></div>
-    <label>Nomor surat pengantar RT<input type="text" name="rt_letter_number" data-filter="letter-number" placeholder="Contoh: 012/RT-04/VI/2026" required></label>
-    <div class="form-grid"><label>Scan surat pengantar RT <span class="label-help">(JPG, PNG, atau PDF · maks. 5 MB)</span><input type="file" name="rt_attachment" accept="image/jpeg,image/png,application/pdf"></label><label id="extra-doc-label">Berkas tambahan <span class="label-help">(jika dipersyaratkan · maks. 5 MB)</span><input type="file" name="extra_attachment" accept="image/jpeg,image/png,application/pdf"></label></div>
+
+    <!-- STANDARD LETTER FIELDS -->
+    <div id="standard-letter-fields">
+      <div class="form-section-title form-section-spaced"><span>03</span><div><h2>Data subjek surat</h2><p>Isi data orang yang tercantum pada surat.</p></div></div>
+      <label class="checkbox-row"><input id="is-self" type="checkbox" name="is_self" value="true" checked><span><strong>Ajukan untuk diri sendiri</strong><small>Data profil Anda akan digunakan otomatis.</small></span></label>
+      <div class="form-grid"><label>Nama lengkap<input type="text" name="applicant_nama" data-profile-name="{{.User.Name}}" data-filter="person-name" pattern="[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?" value="{{.User.Name}}" required></label><label>NIK (16 digit)<input type="text" name="applicant_nik" data-profile-nik="{{.User.NIK}}" value="{{.User.NIK}}" inputmode="numeric" minlength="16" maxlength="16" pattern="[0-9]{16}" data-filter="digits" required></label></div>
+      <div class="form-grid"><label>Tempat lahir<input type="text" name="applicant_tempat_lahir" data-profile-birth-place="{{.User.BirthPlace}}" data-filter="place-name" value="{{.User.BirthPlace}}" required></label><label>Tanggal lahir<input type="date" name="applicant_tanggal_lahir" data-profile-birth="{{.User.BirthDate}}" value="{{.User.BirthDate}}" required></label></div>
+      <div class="form-grid"><label>Jenis kelamin<select name="applicant_jenis_kelamin" data-profile-gender="{{.User.Gender}}" required><option value="">Pilih</option><option value="L" {{if eq .User.Gender "L"}}selected{{end}}>Laki-laki</option><option value="P" {{if eq .User.Gender "P"}}selected{{end}}>Perempuan</option></select></label><label>Pekerjaan<input type="text" name="applicant_pekerjaan" data-profile-occupation="{{.User.Occupation}}" data-filter="occupation" value="{{.User.Occupation}}" required></label></div>
+      <div class="form-grid"><label>Agama<input type="text" name="applicant_agama" data-filter="alpha-text" placeholder="Contoh: Islam" required></label><label>Kewarganegaraan<input type="text" name="applicant_kewarganegaraan" data-filter="alpha-text" value="Indonesia" required></label></div>
+      <label>Alamat<textarea name="applicant_alamat" rows="2" data-profile-address="{{.User.Address}}" data-filter="address" required>{{.User.Address}}</textarea></label>
+      <label>Tujuan / keperluan surat<textarea name="keperluan" rows="2" placeholder="Jelaskan tujuan penggunaan surat" required></textarea></label>
+      <div class="specific-fields" id="specific-fields"></div>
+      <div class="form-section-title form-section-spaced"><span>04</span><div><h2>Surat pengantar & lampiran</h2><p>Unggah berkas pendukung yang diminta untuk layanan ini.</p></div></div>
+      <label>Nomor surat pengantar RT<input type="text" name="rt_letter_number" data-filter="letter-number" placeholder="Contoh: 012/RT-04/VI/2026" required></label>
+      <div class="form-grid"><label>Scan surat pengantar RT <span class="label-help">(JPG, PNG, atau PDF · maks. 5 MB)</span><input type="file" name="rt_attachment" accept="image/jpeg,image/png,application/pdf"></label><label id="extra-doc-label">Berkas tambahan <span class="label-help">(jika dipersyaratkan · maks. 5 MB)</span><input type="file" name="extra_attachment" accept="image/jpeg,image/png,application/pdf"></label></div>
+    </div>
+
+    <!-- INCOME LETTER FIELDS (SK-PENGHASILAN) -->
+    <div id="income-letter-fields" hidden>
+      <input type="hidden" name="keperluan" id="income-purpose" value="Surat Keterangan Penghasilan Orang Tua" disabled>
+
+      <!-- 1. Data Orang Tua -->
+      <div class="form-section-title form-section-spaced"><span>03</span><div><h2>1. Data Orang Tua</h2><p>Lengkapi informasi identitas orang tua pemohon surat penghasilan.</p></div></div>
+      <label class="checkbox-row"><input id="is-self-income" type="checkbox" name="is_self" value="true" disabled><span><strong>Gunakan data profil untuk Data Orang Tua</strong><small>Data profil Anda akan digunakan untuk mengisi bagian Data Orang Tua.</small></span></label>
+      <div class="form-grid">
+        <label>Nama Orang Tua<input type="text" name="applicant_nama" maxlength="60" data-filter="person-name" data-profile-name="{{.User.Name}}" placeholder="Nama lengkap orang tua (maks. 60 karakter)" required disabled></label>
+        <label>Jenis Kelamin
+          <select name="applicant_jenis_kelamin" data-profile-gender="{{.User.Gender}}" required disabled>
+            <option value="">Pilih opsi Jenis Kelamin</option>
+            <option value="Laki-laki">Laki-laki</option>
+            <option value="Perempuan">Perempuan</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label>Tempat Lahir<input type="text" name="applicant_tempat_lahir" maxlength="60" data-filter="place-name" data-profile-birth-place="{{.User.BirthPlace}}" placeholder="Tempat lahir orang tua (maks. 60 karakter)" required disabled></label>
+        <label>Tanggal Lahir<input type="date" name="applicant_tanggal_lahir" maxlength="10" data-profile-birth="{{.User.BirthDate}}" required disabled></label>
+      </div>
+      <div class="form-grid">
+        <label>Agama
+          <select name="applicant_agama" required disabled>
+            <option value="">Pilih opsi Agama</option>
+            <option value="Islam">Islam</option>
+            <option value="Kristen Protestan">Kristen Protestan</option>
+            <option value="Katolik">Katolik</option>
+            <option value="Hindu">Hindu</option>
+            <option value="Buddha">Buddha</option>
+            <option value="Khonghucu">Khonghucu</option>
+          </select>
+        </label>
+        <label>Status Perkawinan
+          <select name="applicant_status_perkawinan" required disabled>
+            <option value="">Pilih opsi Status Perkawinan</option>
+            <option value="Kawin">Kawin</option>
+            <option value="Belum Kawin">Belum Kawin</option>
+            <option value="Cerai Hidup">Cerai Hidup</option>
+            <option value="Cerai Mati">Cerai Mati</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label>NIK<input type="text" name="applicant_nik" maxlength="16" data-profile-nik="{{.User.NIK}}" placeholder="NIK orang tua (maks. 16 karakter)" required disabled></label>
+        <label>Pekerjaan<input type="text" name="applicant_pekerjaan" maxlength="60" data-filter="occupation" data-profile-occupation="{{.User.Occupation}}" placeholder="Pekerjaan orang tua (maks. 60 karakter)" required disabled></label>
+      </div>
+      <label>Alamat<textarea name="applicant_alamat" rows="2" maxlength="255" data-filter="address" data-profile-address="{{.User.Address}}" placeholder="Alamat lengkap orang tua (maks. 255 karakter)" required disabled></textarea></label>
+
+      <!-- 2. Data Anak -->
+      <div class="form-section-title form-section-spaced"><span>04</span><div><h2>2. Data Anak</h2><p>Lengkapi informasi identitas anak yang diajukan.</p></div></div>
+      <div class="form-grid">
+        <label>Nama Anak<input type="text" name="specific_nama_anak" maxlength="60" data-filter="person-name" placeholder="Nama lengkap anak (maks. 60 karakter)" required disabled></label>
+        <label>Jenis Kelamin
+          <select name="specific_jenis_kelamin_anak" required disabled>
+            <option value="">Pilih opsi Jenis Kelamin</option>
+            <option value="Laki-laki">Laki-laki</option>
+            <option value="Perempuan">Perempuan</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label>Tempat Lahir<input type="text" name="specific_tempat_lahir_anak" maxlength="60" data-filter="place-name" placeholder="Tempat lahir anak (maks. 60 karakter)" required disabled></label>
+        <label>Tanggal Lahir<input type="date" name="specific_tanggal_lahir_anak" maxlength="10" required disabled></label>
+      </div>
+      <div class="form-grid">
+        <label>Agama
+          <select name="specific_agama_anak" required disabled>
+            <option value="">Pilih opsi Agama</option>
+            <option value="Islam">Islam</option>
+            <option value="Kristen Protestan">Kristen Protestan</option>
+            <option value="Katolik">Katolik</option>
+            <option value="Hindu">Hindu</option>
+            <option value="Buddha">Buddha</option>
+            <option value="Khonghucu">Khonghucu</option>
+          </select>
+        </label>
+        <label>Status Perkawinan
+          <select name="specific_status_perkawinan_anak" required disabled>
+            <option value="">Pilih opsi Status Perkawinan</option>
+            <option value="Belum Kawin">Belum Kawin</option>
+            <option value="Kawin">Kawin</option>
+            <option value="Cerai Hidup">Cerai Hidup</option>
+            <option value="Cerai Mati">Cerai Mati</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label>NIK<input type="text" name="specific_nik_anak" maxlength="16" placeholder="NIK anak (maks. 16 karakter)" required disabled></label>
+        <label>Pekerjaan<input type="text" name="specific_pekerjaan_anak" maxlength="60" data-filter="occupation" placeholder="Pekerjaan / status anak (maks. 60 karakter)" required disabled></label>
+      </div>
+      <label>Alamat<textarea name="specific_alamat_anak" rows="2" maxlength="255" data-filter="address" placeholder="Alamat lengkap anak (maks. 255 karakter)" required disabled></textarea></label>
+
+      <!-- 3. Data Penghasilan & Dokumen Pendukung -->
+      <div class="form-section-title form-section-spaced"><span>05</span><div><h2>3. Data Penghasilan & Dokumen Pendukung</h2><p>Informasi penghasilan serta berkas surat pengantar dari RT.</p></div></div>
+      <div class="form-grid">
+        <label>Penghasilan Rata-Rata<input type="text" name="specific_penghasilan_rata_rata" maxlength="10" placeholder="Contoh: 3500000 (maks. 10 karakter)" required disabled></label>
+        <label>Sumber Penghasilan<input type="text" name="specific_sumber_penghasilan" maxlength="60" placeholder="Sumber penghasilan (maks. 60 karakter)" required disabled></label>
+      </div>
+      <label>Nomor Surat Pengantar RT<input type="text" name="rt_letter_number" maxlength="60" data-filter="letter-number" placeholder="Nomor surat pengantar RT (maks. 60 karakter)" required disabled></label>
+      <label>Upload Surat Pengantar RT <span class="label-help">(JPG, PNG, atau PDF · maks. 5 MB)</span><input type="file" name="rt_attachment" accept="image/jpeg,image/png,application/pdf" required disabled></label>
+    </div>
+
     <div class="form-note"><span>ⓘ</span><p>Pastikan informasi sesuai dokumen pendukung. Petugas dapat meminta perbaikan jika ada data yang belum lengkap.</p></div>
     <div class="form-actions"><a href="/dashboard" class="button button-outline">Batal</a><button class="button button-primary" type="submit">Kirim permohonan <span>→</span></button></div>
   </form>

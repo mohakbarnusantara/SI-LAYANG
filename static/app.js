@@ -11,13 +11,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const selfToggle = document.getElementById("is-self");
   if (selfToggle) {
     const fields = {
-      nama: { element: document.querySelector('[name="applicant_nama"]'), profile: "profileName" },
-      nik: { element: document.querySelector('[name="applicant_nik"]'), profile: "profileNik" },
-      tempat_lahir: { element: document.querySelector('[name="applicant_tempat_lahir"]'), profile: "profileBirthPlace" },
-      tanggal_lahir: { element: document.querySelector('[name="applicant_tanggal_lahir"]'), profile: "profileBirth" },
-      jenis_kelamin: { element: document.querySelector('[name="applicant_jenis_kelamin"]'), profile: "profileGender" },
-      pekerjaan: { element: document.querySelector('[name="applicant_pekerjaan"]'), profile: "profileOccupation" },
-      alamat: { element: document.querySelector('[name="applicant_alamat"]'), profile: "profileAddress" },
+      nama: { element: document.querySelector('#standard-letter-fields [name="applicant_nama"]'), profile: "profileName" },
+      nik: { element: document.querySelector('#standard-letter-fields [name="applicant_nik"]'), profile: "profileNik" },
+      tempat_lahir: { element: document.querySelector('#standard-letter-fields [name="applicant_tempat_lahir"]'), profile: "profileBirthPlace" },
+      tanggal_lahir: { element: document.querySelector('#standard-letter-fields [name="applicant_tanggal_lahir"]'), profile: "profileBirth" },
+      jenis_kelamin: { element: document.querySelector('#standard-letter-fields [name="applicant_jenis_kelamin"]'), profile: "profileGender" },
+      pekerjaan: { element: document.querySelector('#standard-letter-fields [name="applicant_pekerjaan"]'), profile: "profileOccupation" },
+      alamat: { element: document.querySelector('#standard-letter-fields [name="applicant_alamat"]'), profile: "profileAddress" },
     };
     const fillFromProfile = (enabled) => {
       for (const field of Object.values(fields)) {
@@ -32,23 +32,92 @@ document.addEventListener("DOMContentLoaded", () => {
     selfToggle.addEventListener("change", () => fillFromProfile(selfToggle.checked));
   }
 
+  const selfIncomeToggle = document.getElementById("is-self-income");
+  if (selfIncomeToggle) {
+    const incomeFields = {
+      nama: { element: document.querySelector('#income-letter-fields [name="applicant_nama"]'), profile: "profileName" },
+      nik: { element: document.querySelector('#income-letter-fields [name="applicant_nik"]'), profile: "profileNik" },
+      tempat_lahir: { element: document.querySelector('#income-letter-fields [name="applicant_tempat_lahir"]'), profile: "profileBirthPlace" },
+      tanggal_lahir: { element: document.querySelector('#income-letter-fields [name="applicant_tanggal_lahir"]'), profile: "profileBirth" },
+      jenis_kelamin: { element: document.querySelector('#income-letter-fields [name="applicant_jenis_kelamin"]'), profile: "profileGender" },
+      pekerjaan: { element: document.querySelector('#income-letter-fields [name="applicant_pekerjaan"]'), profile: "profileOccupation" },
+      alamat: { element: document.querySelector('#income-letter-fields [name="applicant_alamat"]'), profile: "profileAddress" },
+    };
+    const fillIncomeFromProfile = (enabled) => {
+      for (const field of Object.values(incomeFields)) {
+        const input = field.element;
+        if (!input) continue;
+        if (enabled) {
+          if (field.profile === "profileGender") {
+            const g = input.dataset.profileGender;
+            input.value = g === "P" ? "Perempuan" : (g === "L" ? "Laki-laki" : "");
+          } else {
+            input.value = input.dataset[field.profile] || "";
+          }
+        } else {
+          input.value = "";
+        }
+        input.classList.remove("input-invalid");
+        input.removeAttribute("aria-invalid");
+        input.setCustomValidity("");
+      }
+    };
+    selfIncomeToggle.addEventListener("change", () => fillIncomeFromProfile(selfIncomeToggle.checked));
+  }
+
   const serviceSelect = document.getElementById("service-select");
   const fieldContainer = document.getElementById("specific-fields");
   const hint = document.getElementById("service-hint");
   const extraLabel = document.getElementById("extra-doc-label");
-  if (serviceSelect && fieldContainer) {
-    serviceSelect.addEventListener("change", () => {
+  const standardFields = document.getElementById("standard-letter-fields");
+  const incomeFields = document.getElementById("income-letter-fields");
+
+  if (serviceSelect) {
+    const setContainerFieldsDisabled = (container, disabled) => {
+      if (!container) return;
+      container.querySelectorAll("input, select, textarea").forEach((el) => {
+        el.disabled = disabled;
+        if (disabled) {
+          el.classList.remove("input-invalid");
+          el.removeAttribute("aria-invalid");
+          el.setCustomValidity("");
+        }
+      });
+    };
+
+    const updateServiceView = () => {
+      const isIncome = serviceSelect.value === "SK-PENGHASILAN";
+      if (standardFields && incomeFields) {
+        if (isIncome) {
+          standardFields.hidden = true;
+          setContainerFieldsDisabled(standardFields, true);
+          incomeFields.hidden = false;
+          setContainerFieldsDisabled(incomeFields, false);
+          if (fieldContainer) fieldContainer.replaceChildren();
+          if (hint) hint.textContent = "Lengkapi Data Orang Tua, Data Anak, serta Data Penghasilan & Dokumen Pendukung.";
+          extraLabel?.classList.remove("required-doc");
+          return;
+        } else {
+          standardFields.hidden = false;
+          setContainerFieldsDisabled(standardFields, false);
+          incomeFields.hidden = true;
+          setContainerFieldsDisabled(incomeFields, true);
+        }
+      }
+
       const option = serviceSelect.selectedOptions[0];
-      fieldContainer.replaceChildren();
+      if (fieldContainer) fieldContainer.replaceChildren();
       if (!option || !option.value) {
-        hint.textContent = "Setiap layanan dapat meminta data khusus dan berkas pendukung.";
+        if (hint) hint.textContent = "Setiap layanan dapat meminta data khusus dan berkas pendukung.";
         extraLabel?.classList.remove("required-doc");
         return;
       }
       const labels = (option.dataset.fields || "").split("|").filter(Boolean);
-      hint.textContent = labels.length
-        ? `Data tambahan untuk layanan ini: ${labels.join(", ")}.`
-        : "Tidak ada data khusus tambahan untuk layanan ini.";
+      if (hint) {
+        hint.textContent = labels.length
+          ? `Data tambahan untuk layanan ini: ${labels.join(", ")}.`
+          : "Tidak ada data khusus tambahan untuk layanan ini.";
+      }
       labels.forEach((label) => {
         const wrap = document.createElement("label");
         wrap.textContent = label;
@@ -61,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (input.tagName === "INPUT") input.type = "date";
         else input.rows = 2;
         wrap.append(input);
-        fieldContainer.append(wrap);
+        fieldContainer?.append(wrap);
       });
       if (option.dataset.extra) {
         const label = extraLabel?.querySelector("input");
@@ -74,7 +143,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const caption = extraLabel?.querySelector(".label-help");
         if (caption) caption.textContent = "(jika dipersyaratkan · maks. 5 MB)";
       }
-    });
+    };
+
+    serviceSelect.addEventListener("change", updateServiceView);
+    if (serviceSelect.value) updateServiceView();
   }
 
   const districts = {
@@ -170,22 +242,24 @@ document.addEventListener("DOMContentLoaded", () => {
     "tracking-code": (value) => value.toUpperCase().replace(/[^A-Z0-9\-]/g, ""),
   };
 
-  document.querySelectorAll("[data-filter]").forEach((field) => {
-    const sanitize = inputFilters[field.dataset.filter];
+  document.addEventListener("input", (event) => {
+    const field = event.target;
+    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return;
+    const filterName = field.dataset?.filter;
+    if (!filterName) return;
+    const sanitize = inputFilters[filterName];
     if (!sanitize) return;
-    field.addEventListener("input", () => {
-      const raw = field.value;
-      const start = field.selectionStart;
-      const cleaned = sanitize(raw);
-      if (cleaned !== raw) {
-        field.value = cleaned;
-        if (typeof start === "number" && field.type !== "email") {
-          const nextPos = sanitize(raw.slice(0, start)).length;
-          field.setSelectionRange(nextPos, nextPos);
-        }
+    const raw = field.value;
+    const start = field.selectionStart;
+    const cleaned = sanitize(raw);
+    if (cleaned !== raw) {
+      field.value = cleaned;
+      if (typeof start === "number" && field.type !== "email") {
+        const nextPos = sanitize(raw.slice(0, start)).length;
+        field.setSelectionRange(nextPos, nextPos);
       }
-      field.setCustomValidity?.("");
-    });
+    }
+    field.setCustomValidity?.("");
   });
 
   const registerForm = document.getElementById("register-form");
@@ -370,13 +444,13 @@ document.addEventListener("DOMContentLoaded", () => {
           ? `Kolom ${label} masih kosong, silakan pilih terlebih dahulu.`
           : `Kolom ${label} masih kosong, silakan isi terlebih dahulu.`;
       }
-      if (field.name === "applicant_nama") {
-        if (/\d/.test(val)) return "Nama lengkap tidak boleh mengandung angka.";
+      if (field.name === "applicant_nama" || field.name === "specific_nama_anak") {
+        if (/\d/.test(val)) return `Kolom ${label} tidak boleh mengandung angka.`;
         if (!nameRegex.test(val)) {
-          return "Nama lengkap hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf.";
+          return `Kolom ${label} hanya boleh berisi huruf, spasi, serta tanda titik (.), koma (,) untuk gelar, apostrof ('), atau tanda hubung (-) di antara huruf.`;
         }
       }
-      if (field.name === "applicant_nik" && !/^\d{16}$/.test(val)) {
+      if (field.name === "applicant_nik" && field.closest("#standard-letter-fields") && !/^\d{16}$/.test(val)) {
         return "NIK harus terdiri dari 16 digit angka.";
       }
       return "";

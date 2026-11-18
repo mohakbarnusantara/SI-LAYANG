@@ -27,6 +27,38 @@
     <h1>{{.Request.ServiceName}}</h1>
     <h2>Nomor: {{.Request.OfficialNumber}}</h2>
     {{if .IsDraft}}<div class="draft-watermark">DRAFT · BELUM DISETUJUI LURAH</div>{{end}}
+    {{if eq .Request.ServiceCode "SK-PENGHASILAN"}}
+    <p class="document-intro">Yang bertanda tangan di bawah ini menerangkan bahwa:</p>
+    <p style="font-weight:bold; margin: 10px 0 4px; font-size: 13px;">I. Data Orang Tua / Wali:</p>
+    <table class="document-data">
+      <tr><td>Nama Orang Tua</td><td>: {{.Request.Applicant.nama}}</td></tr>
+      <tr><td>Jenis Kelamin</td><td>: {{.Request.Applicant.jenis_kelamin}}</td></tr>
+      <tr><td>Tempat, Tanggal Lahir</td><td>: {{.Request.Applicant.tempat_lahir}}{{if and .Request.Applicant.tempat_lahir .Request.Applicant.tanggal_lahir}}, {{end}}{{.Request.Applicant.tanggal_lahir}}</td></tr>
+      <tr><td>Agama</td><td>: {{.Request.Applicant.agama}}</td></tr>
+      <tr><td>Status Perkawinan</td><td>: {{.Request.Applicant.status_perkawinan}}</td></tr>
+      <tr><td>NIK</td><td>: {{.Request.Applicant.nik}}</td></tr>
+      <tr><td>Pekerjaan</td><td>: {{.Request.Applicant.pekerjaan}}</td></tr>
+      <tr><td>Alamat</td><td>: {{.Request.Applicant.alamat}}</td></tr>
+    </table>
+    <p class="document-intro" style="margin-top:12px">Adalah benar orang tua / wali dari:</p>
+    <p style="font-weight:bold; margin: 10px 0 4px; font-size: 13px;">II. Data Anak:</p>
+    <table class="document-data">
+      <tr><td>Nama Anak</td><td>: {{index .Request.Specific "Nama Anak"}}</td></tr>
+      <tr><td>Jenis Kelamin</td><td>: {{index .Request.Specific "Jenis Kelamin Anak"}}</td></tr>
+      <tr><td>Tempat, Tanggal Lahir</td><td>: {{index .Request.Specific "Tempat Lahir Anak"}}{{if and (index .Request.Specific "Tempat Lahir Anak") (index .Request.Specific "Tanggal Lahir Anak")}}, {{end}}{{index .Request.Specific "Tanggal Lahir Anak"}}</td></tr>
+      <tr><td>Agama</td><td>: {{index .Request.Specific "Agama Anak"}}</td></tr>
+      <tr><td>Status Perkawinan</td><td>: {{index .Request.Specific "Status Perkawinan Anak"}}</td></tr>
+      <tr><td>NIK</td><td>: {{index .Request.Specific "NIK Anak"}}</td></tr>
+      <tr><td>Pekerjaan</td><td>: {{index .Request.Specific "Pekerjaan Anak"}}</td></tr>
+      <tr><td>Alamat</td><td>: {{index .Request.Specific "Alamat Anak"}}</td></tr>
+    </table>
+    <p class="document-intro" style="margin-top:12px">Berdasarkan data yang ada dan Surat Pengantar RT Nomor {{.Request.RTLetterNumber}}, yang bersangkutan benar memiliki penghasilan:</p>
+    <p style="font-weight:bold; margin: 10px 0 4px; font-size: 13px;">III. Data Penghasilan:</p>
+    <table class="document-data">
+      <tr><td>Penghasilan Rata-Rata</td><td>: {{index .Request.Specific "Penghasilan Rata-Rata"}}</td></tr>
+      <tr><td>Sumber Penghasilan</td><td>: {{index .Request.Specific "Sumber Penghasilan"}}</td></tr>
+    </table>
+    {{else}}
     <p class="document-intro">Yang bertanda tangan di bawah ini menerangkan bahwa:</p>
     <table class="document-data">
       <tr><td>Nama</td><td>: {{.Request.Applicant.nama}}</td></tr>
@@ -36,6 +68,7 @@
       <tr><td>Alamat</td><td>: {{.Request.Applicant.alamat}}</td></tr>
       {{range $key,$value := .Request.Specific}}<tr><td>{{$key}}</td><td>: {{$value}}</td></tr>{{end}}
     </table>
+    {{end}}
     <p>Surat keterangan ini dibuat berdasarkan data dan berkas yang telah diperiksa, untuk dipergunakan sebagaimana mestinya.</p>
     <div class="signature-block">
       <p>Palu, {{date .Request.UpdatedAt}}</p>
