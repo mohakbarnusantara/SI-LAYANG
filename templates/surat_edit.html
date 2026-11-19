@@ -1,0 +1,315 @@
+{{define "surat_edit"}}{{template "layout" .}}{{end}}
+{{define "surat-edit-content"}}
+<section class="page-heading">
+  <div>
+    <a class="back-link" href="/dashboard">← Ringkasan</a>
+    <span class="eyebrow eyebrow-green">PERBAIKAN PERMOHONAN</span>
+    <h1>Perbaiki {{.Request.ServiceName}}</h1>
+    <p>Kode permohonan: <strong>{{.Request.TrackingCode}}</strong></p>
+  </div>
+  <span class="heading-illustration">✎</span>
+</section>
+<div class="form-page">
+  {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+  <div class="alert" style="background:#fff8e8; border:1px solid #fcd34d; color:#92400e; margin-bottom: 20px; border-radius: 8px; padding: 14px 18px;">
+    <strong style="display:flex; align-items:center; gap:6px; font-size:13px;">⚠️ Catatan perbaikan dari petugas kelurahan:</strong>
+    <p style="margin: 8px 0 0; font-size: 13px; line-height: 1.5; font-weight: 500;">{{.Request.AdminNote}}</p>
+  </div>
+
+  <form id="letter-edit-form" method="post" action="/surat/{{.Request.ID}}/edit" enctype="multipart/form-data" class="panel form-panel" novalidate>
+    <div class="form-section-title"><span>01</span><div><h2>Wilayah surat</h2><p>Wilayah permohonan surat.</p></div></div>
+    <div class="form-grid">
+      <label>Kecamatan<input type="text" name="kecamatan" value="{{.Request.District}}" readonly style="background:#f8faf9; color:#52635f;"></label>
+      <label>Kelurahan<input type="text" name="kelurahan" value="{{.Request.Neighborhood}}" readonly style="background:#f8faf9; color:#52635f;"></label>
+    </div>
+
+    <div class="form-section-title form-section-spaced"><span>02</span><div><h2>Layanan surat</h2><p>Jenis layanan surat yang diajukan.</p></div></div>
+    <label>Jenis surat<input type="text" value="{{.Request.ServiceName}}" readonly style="background:#f8faf9; color:#52635f;"></label>
+
+    {{if eq .Request.ServiceCode "SK-PENGHASILAN"}}
+      <!-- 1. Data Orang Tua -->
+      <div class="form-section-title form-section-spaced"><span>03</span><div><h2>1. Data Orang Tua</h2><p>Perbaiki data identitas orang tua jika diperlukan.</p></div></div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "nama"}}class="field-revision-highlight"{{end}}>
+          Nama Orang Tua {{if isRevisionField $.Request.AdminNote "nama"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_nama" maxlength="60" data-filter="person-name" value="{{.Request.Applicant.nama}}" {{if isRevisionField $.Request.AdminNote "nama"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "nama"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}class="field-revision-highlight"{{end}}>
+          Jenis Kelamin {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <select name="applicant_jenis_kelamin" {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}class="input-revision-needed"{{end}} required>
+            <option value="">Pilih opsi Jenis Kelamin</option>
+            <option value="Laki-laki" {{if eq .Request.Applicant.jenis_kelamin "Laki-laki"}}selected{{end}}>Laki-laki</option>
+            <option value="Perempuan" {{if eq .Request.Applicant.jenis_kelamin "Perempuan"}}selected{{end}}>Perempuan</option>
+          </select>
+          {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}class="field-revision-highlight"{{end}}>
+          Tempat Lahir {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_tempat_lahir" maxlength="60" data-filter="place-name" value="{{.Request.Applicant.tempat_lahir}}" {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}class="field-revision-highlight"{{end}}>
+          Tanggal Lahir {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="date" name="applicant_tanggal_lahir" maxlength="10" value="{{.Request.Applicant.tanggal_lahir}}" {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "agama"}}class="field-revision-highlight"{{end}}>
+          Agama {{if isRevisionField $.Request.AdminNote "agama"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <select name="applicant_agama" {{if isRevisionField $.Request.AdminNote "agama"}}class="input-revision-needed"{{end}} required>
+            <option value="">Pilih opsi Agama</option>
+            <option value="Islam" {{if eq .Request.Applicant.agama "Islam"}}selected{{end}}>Islam</option>
+            <option value="Kristen Protestan" {{if eq .Request.Applicant.agama "Kristen Protestan"}}selected{{end}}>Kristen Protestan</option>
+            <option value="Katolik" {{if eq .Request.Applicant.agama "Katolik"}}selected{{end}}>Katolik</option>
+            <option value="Hindu" {{if eq .Request.Applicant.agama "Hindu"}}selected{{end}}>Hindu</option>
+            <option value="Buddha" {{if eq .Request.Applicant.agama "Buddha"}}selected{{end}}>Buddha</option>
+            <option value="Khonghucu" {{if eq .Request.Applicant.agama "Khonghucu"}}selected{{end}}>Khonghucu</option>
+          </select>
+          {{if isRevisionField $.Request.AdminNote "agama"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}class="field-revision-highlight"{{end}}>
+          Status Perkawinan {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <select name="applicant_status_perkawinan" {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}class="input-revision-needed"{{end}} required>
+            <option value="">Pilih opsi Status Perkawinan</option>
+            <option value="Kawin" {{if eq .Request.Applicant.status_perkawinan "Kawin"}}selected{{end}}>Kawin</option>
+            <option value="Belum Kawin" {{if eq .Request.Applicant.status_perkawinan "Belum Kawin"}}selected{{end}}>Belum Kawin</option>
+            <option value="Cerai Hidup" {{if eq .Request.Applicant.status_perkawinan "Cerai Hidup"}}selected{{end}}>Cerai Hidup</option>
+            <option value="Cerai Mati" {{if eq .Request.Applicant.status_perkawinan "Cerai Mati"}}selected{{end}}>Cerai Mati</option>
+          </select>
+          {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "nik"}}class="field-revision-highlight"{{end}}>
+          NIK {{if isRevisionField $.Request.AdminNote "nik"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_nik" maxlength="16" value="{{.Request.Applicant.nik}}" {{if isRevisionField $.Request.AdminNote "nik"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "nik"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "pekerjaan"}}class="field-revision-highlight"{{end}}>
+          Pekerjaan {{if isRevisionField $.Request.AdminNote "pekerjaan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_pekerjaan" maxlength="60" data-filter="occupation" value="{{.Request.Applicant.pekerjaan}}" {{if isRevisionField $.Request.AdminNote "pekerjaan"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "pekerjaan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <label {{if isRevisionField $.Request.AdminNote "alamat"}}class="field-revision-highlight"{{end}}>
+        Alamat {{if isRevisionField $.Request.AdminNote "alamat"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+        <textarea name="applicant_alamat" rows="2" maxlength="255" data-filter="address" {{if isRevisionField $.Request.AdminNote "alamat"}}class="input-revision-needed"{{end}} required>{{.Request.Applicant.alamat}}</textarea>
+        {{if isRevisionField $.Request.AdminNote "alamat"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+      </label>
+
+      <!-- 2. Data Anak -->
+      <div class="form-section-title form-section-spaced"><span>04</span><div><h2>2. Data Anak</h2><p>Perbaiki data identitas anak jika diperlukan.</p></div></div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "nama_anak"}}class="field-revision-highlight"{{end}}>
+          Nama Anak {{if isRevisionField $.Request.AdminNote "nama_anak"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="specific_nama_anak" maxlength="60" data-filter="person-name" value="{{index .Request.Specific "Nama Anak"}}" {{if isRevisionField $.Request.AdminNote "nama_anak"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "nama_anak"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}class="field-revision-highlight"{{end}}>
+          Jenis Kelamin {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <select name="specific_jenis_kelamin_anak" {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}class="input-revision-needed"{{end}} required>
+            <option value="">Pilih opsi Jenis Kelamin</option>
+            <option value="Laki-laki" {{if eq (index .Request.Specific "Jenis Kelamin Anak") "Laki-laki"}}selected{{end}}>Laki-laki</option>
+            <option value="Perempuan" {{if eq (index .Request.Specific "Jenis Kelamin Anak") "Perempuan"}}selected{{end}}>Perempuan</option>
+          </select>
+          {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}class="field-revision-highlight"{{end}}>
+          Tempat Lahir {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="specific_tempat_lahir_anak" maxlength="60" data-filter="place-name" value="{{index .Request.Specific "Tempat Lahir Anak"}}" {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}class="field-revision-highlight"{{end}}>
+          Tanggal Lahir {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="date" name="specific_tanggal_lahir_anak" maxlength="10" value="{{index .Request.Specific "Tanggal Lahir Anak"}}" {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "agama"}}class="field-revision-highlight"{{end}}>
+          Agama {{if isRevisionField $.Request.AdminNote "agama"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <select name="specific_agama_anak" {{if isRevisionField $.Request.AdminNote "agama"}}class="input-revision-needed"{{end}} required>
+            <option value="">Pilih opsi Agama</option>
+            <option value="Islam" {{if eq (index .Request.Specific "Agama Anak") "Islam"}}selected{{end}}>Islam</option>
+            <option value="Kristen Protestan" {{if eq (index .Request.Specific "Agama Anak") "Kristen Protestan"}}selected{{end}}>Kristen Protestan</option>
+            <option value="Katolik" {{if eq (index .Request.Specific "Agama Anak") "Katolik"}}selected{{end}}>Katolik</option>
+            <option value="Hindu" {{if eq (index .Request.Specific "Agama Anak") "Hindu"}}selected{{end}}>Hindu</option>
+            <option value="Buddha" {{if eq (index .Request.Specific "Agama Anak") "Buddha"}}selected{{end}}>Buddha</option>
+            <option value="Khonghucu" {{if eq (index .Request.Specific "Agama Anak") "Khonghucu"}}selected{{end}}>Khonghucu</option>
+          </select>
+          {{if isRevisionField $.Request.AdminNote "agama"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}class="field-revision-highlight"{{end}}>
+          Status Perkawinan {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <select name="specific_status_perkawinan_anak" {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}class="input-revision-needed"{{end}} required>
+            <option value="">Pilih opsi Status Perkawinan</option>
+            <option value="Belum Kawin" {{if eq (index .Request.Specific "Status Perkawinan Anak") "Belum Kawin"}}selected{{end}}>Belum Kawin</option>
+            <option value="Kawin" {{if eq (index .Request.Specific "Status Perkawinan Anak") "Kawin"}}selected{{end}}>Kawin</option>
+            <option value="Cerai Hidup" {{if eq (index .Request.Specific "Status Perkawinan Anak") "Cerai Hidup"}}selected{{end}}>Cerai Hidup</option>
+            <option value="Cerai Mati" {{if eq (index .Request.Specific "Status Perkawinan Anak") "Cerai Mati"}}selected{{end}}>Cerai Mati</option>
+          </select>
+          {{if isRevisionField $.Request.AdminNote "status_perkawinan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "nik_anak"}}class="field-revision-highlight"{{end}}>
+          NIK {{if isRevisionField $.Request.AdminNote "nik_anak"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="specific_nik_anak" maxlength="16" value="{{index .Request.Specific "NIK Anak"}}" {{if isRevisionField $.Request.AdminNote "nik_anak"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "nik_anak"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "pekerjaan"}}class="field-revision-highlight"{{end}}>
+          Pekerjaan {{if isRevisionField $.Request.AdminNote "pekerjaan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="specific_pekerjaan_anak" maxlength="60" data-filter="occupation" value="{{index .Request.Specific "Pekerjaan Anak"}}" {{if isRevisionField $.Request.AdminNote "pekerjaan"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "pekerjaan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <label {{if isRevisionField $.Request.AdminNote "alamat"}}class="field-revision-highlight"{{end}}>
+        Alamat {{if isRevisionField $.Request.AdminNote "alamat"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+        <textarea name="specific_alamat_anak" rows="2" maxlength="255" data-filter="address" {{if isRevisionField $.Request.AdminNote "alamat"}}class="input-revision-needed"{{end}} required>{{index .Request.Specific "Alamat Anak"}}</textarea>
+        {{if isRevisionField $.Request.AdminNote "alamat"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+      </label>
+
+      <!-- 3. Data Penghasilan & Dokumen Pendukung -->
+      <div class="form-section-title form-section-spaced"><span>05</span><div><h2>3. Data Penghasilan & Dokumen Pendukung</h2><p>Perbaiki data penghasilan atau nomor surat RT.</p></div></div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "penghasilan"}}class="field-revision-highlight"{{end}}>
+          Penghasilan Rata-Rata {{if isRevisionField $.Request.AdminNote "penghasilan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="specific_penghasilan_rata_rata" maxlength="10" value="{{index .Request.Specific "Penghasilan Rata-Rata"}}" {{if isRevisionField $.Request.AdminNote "penghasilan"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "penghasilan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "sumber"}}class="field-revision-highlight"{{end}}>
+          Sumber Penghasilan {{if isRevisionField $.Request.AdminNote "sumber"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="specific_sumber_penghasilan" maxlength="60" value="{{index .Request.Specific "Sumber Penghasilan"}}" {{if isRevisionField $.Request.AdminNote "sumber"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "sumber"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <label {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}class="field-revision-highlight"{{end}}>
+        Nomor Surat Pengantar RT {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+        <input type="text" name="rt_letter_number" maxlength="60" data-filter="letter-number" value="{{.Request.RTLetterNumber}}" {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}class="input-revision-needed"{{end}} required>
+        {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+      </label>
+      <label {{if isRevisionField $.Request.AdminNote "rt_attachment"}}class="field-revision-highlight"{{end}}>
+        Upload Surat Pengantar RT {{if isRevisionField $.Request.AdminNote "rt_attachment"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+        <span class="label-help">{{if .Request.Attachments}}(opsional jika tidak diubah · <a href="{{index .Request.Attachments 0}}" target="_blank" class="text-link">Lihat berkas saat ini ↗</a> · maks. 5 MB){{else}}(JPG, PNG, atau PDF · maks. 5 MB){{end}}</span>
+        <input type="file" name="rt_attachment" accept="image/jpeg,image/png,application/pdf" {{if isRevisionField $.Request.AdminNote "rt_attachment"}}class="input-revision-needed"{{end}}>
+        {{if isRevisionField $.Request.AdminNote "rt_attachment"}}<small class="revision-hint-text">⚠️ Berkas ini ditandai oleh petugas untuk diunggah ulang.</small>{{end}}
+      </label>
+
+    {{else}}
+
+      <!-- STANDAR SURAT LAINNYA -->
+      <div class="form-section-title form-section-spaced"><span>03</span><div><h2>Data subjek surat</h2><p>Perbaiki data pemohon yang tercantum pada surat.</p></div></div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "nama"}}class="field-revision-highlight"{{end}}>
+          Nama lengkap {{if isRevisionField $.Request.AdminNote "nama"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_nama" data-filter="person-name" pattern="[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?" value="{{.Request.Applicant.nama}}" {{if isRevisionField $.Request.AdminNote "nama"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "nama"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "nik"}}class="field-revision-highlight"{{end}}>
+          NIK (16 digit) {{if isRevisionField $.Request.AdminNote "nik"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_nik" value="{{.Request.Applicant.nik}}" inputmode="numeric" minlength="16" maxlength="16" pattern="[0-9]{16}" data-filter="digits" {{if isRevisionField $.Request.AdminNote "nik"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "nik"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}class="field-revision-highlight"{{end}}>
+          Tempat lahir {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_tempat_lahir" data-filter="place-name" value="{{.Request.Applicant.tempat_lahir}}" {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "tempat_lahir"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}class="field-revision-highlight"{{end}}>
+          Tanggal lahir {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="date" name="applicant_tanggal_lahir" value="{{.Request.Applicant.tanggal_lahir}}" {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "tanggal_lahir"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}class="field-revision-highlight"{{end}}>
+          Jenis kelamin {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <select name="applicant_jenis_kelamin" {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}class="input-revision-needed"{{end}} required>
+            <option value="">Pilih</option>
+            <option value="Laki-laki" {{if or (eq .Request.Applicant.jenis_kelamin "L") (eq .Request.Applicant.jenis_kelamin "Laki-laki")}}selected{{end}}>Laki-laki</option>
+            <option value="Perempuan" {{if or (eq .Request.Applicant.jenis_kelamin "P") (eq .Request.Applicant.jenis_kelamin "Perempuan")}}selected{{end}}>Perempuan</option>
+          </select>
+          {{if isRevisionField $.Request.AdminNote "jenis_kelamin"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "pekerjaan"}}class="field-revision-highlight"{{end}}>
+          Pekerjaan {{if isRevisionField $.Request.AdminNote "pekerjaan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_pekerjaan" data-filter="occupation" value="{{.Request.Applicant.pekerjaan}}" {{if isRevisionField $.Request.AdminNote "pekerjaan"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "pekerjaan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "agama"}}class="field-revision-highlight"{{end}}>
+          Agama {{if isRevisionField $.Request.AdminNote "agama"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_agama" data-filter="alpha-text" value="{{.Request.Applicant.agama}}" {{if isRevisionField $.Request.AdminNote "agama"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "agama"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+        <label {{if isRevisionField $.Request.AdminNote "kewarganegaraan"}}class="field-revision-highlight"{{end}}>
+          Kewarganegaraan {{if isRevisionField $.Request.AdminNote "kewarganegaraan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <input type="text" name="applicant_kewarganegaraan" data-filter="alpha-text" value="{{if .Request.Applicant.kewarganegaraan}}{{.Request.Applicant.kewarganegaraan}}{{else}}Indonesia{{end}}" {{if isRevisionField $.Request.AdminNote "kewarganegaraan"}}class="input-revision-needed"{{end}} required>
+          {{if isRevisionField $.Request.AdminNote "kewarganegaraan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+        </label>
+      </div>
+      <label {{if isRevisionField $.Request.AdminNote "alamat"}}class="field-revision-highlight"{{end}}>
+        Alamat {{if isRevisionField $.Request.AdminNote "alamat"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+        <textarea name="applicant_alamat" rows="2" data-filter="address" {{if isRevisionField $.Request.AdminNote "alamat"}}class="input-revision-needed"{{end}} required>{{.Request.Applicant.alamat}}</textarea>
+        {{if isRevisionField $.Request.AdminNote "alamat"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+      </label>
+      <label {{if isRevisionField $.Request.AdminNote "keperluan"}}class="field-revision-highlight"{{end}}>
+        Tujuan / keperluan surat {{if isRevisionField $.Request.AdminNote "keperluan"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+        <textarea name="keperluan" rows="2" {{if isRevisionField $.Request.AdminNote "keperluan"}}class="input-revision-needed"{{end}} required>{{.Request.Purpose}}</textarea>
+        {{if isRevisionField $.Request.AdminNote "keperluan"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+      </label>
+
+      {{if .Service}}
+        {{if .Service.Fields}}
+          <div class="form-section-title form-section-spaced"><span>04</span><div><h2>Data khusus layanan</h2><p>Data tambahan yang diminta untuk jenis surat ini.</p></div></div>
+          <div class="specific-fields" id="specific-fields">
+            {{range $field := .Service.Fields}}
+              <label>
+                {{$field}}
+                {{$fieldVal := index $.Request.Specific $field}}
+                {{if isDateField $field}}
+                  <input type="date" name="specific_{{fieldKey $field}}" value="{{$fieldVal}}" required>
+                {{else}}
+                  <textarea name="specific_{{fieldKey $field}}" rows="2" required>{{$fieldVal}}</textarea>
+                {{end}}
+              </label>
+            {{end}}
+          </div>
+        {{end}}
+      {{end}}
+
+      <div class="form-section-title form-section-spaced"><span>05</span><div><h2>Surat pengantar & lampiran</h2><p>Perbarui berkas pendukung jika diperlukan.</p></div></div>
+      <label {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}class="field-revision-highlight"{{end}}>
+        Nomor surat pengantar RT {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+        <input type="text" name="rt_letter_number" data-filter="letter-number" value="{{.Request.RTLetterNumber}}" {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}class="input-revision-needed"{{end}} required>
+        {{if isRevisionField $.Request.AdminNote "rt_letter_number"}}<small class="revision-hint-text">⚠️ Kolom ini ditandai oleh petugas untuk diperbaiki.</small>{{end}}
+      </label>
+      <div class="form-grid">
+        <label {{if isRevisionField $.Request.AdminNote "rt_attachment"}}class="field-revision-highlight"{{end}}>
+          Scan surat pengantar RT {{if isRevisionField $.Request.AdminNote "rt_attachment"}}<span class="badge-revision-needed">⚠️ Perlu Diperbaiki</span>{{end}}
+          <span class="label-help">{{if .Request.Attachments}}(opsional jika tidak diubah · <a href="{{index .Request.Attachments 0}}" target="_blank" class="text-link">Lihat berkas saat ini ↗</a>){{else}}(JPG, PNG, atau PDF · maks. 5 MB){{end}}</span>
+          <input type="file" name="rt_attachment" accept="image/jpeg,image/png,application/pdf" {{if isRevisionField $.Request.AdminNote "rt_attachment"}}class="input-revision-needed"{{end}}>
+          {{if isRevisionField $.Request.AdminNote "rt_attachment"}}<small class="revision-hint-text">⚠️ Berkas ini ditandai oleh petugas untuk diunggah ulang.</small>{{end}}
+        </label>
+        <label>Berkas tambahan <span class="label-help">{{if and (gt (len .Request.Attachments) 1) (index .Request.Attachments 1)}}(opsional jika tidak diubah · <a href="{{index .Request.Attachments 1}}" target="_blank" class="text-link">Lihat berkas saat ini ↗</a>){{else}}(jika dipersyaratkan · maks. 5 MB){{end}}</span><input type="file" name="extra_attachment" accept="image/jpeg,image/png,application/pdf"></label>
+      </div>
+
+    {{end}}
+
+    <div class="form-note"><span>ⓘ</span><p>Setelah mengirim perbaikan, permohonan Anda akan kembali diperiksa oleh staf kelurahan.</p></div>
+    <div class="form-actions">
+      <a href="/dashboard" class="button button-outline">Batal</a>
+      <button class="button button-primary" type="submit">Kirim perbaikan permohonan <span>→</span></button>
+    </div>
+  </form>
+</div>
+{{end}}

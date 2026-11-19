@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#075e54">
   <title>{{.Title}} · SILAYANG</title>
-  <link rel="stylesheet" href="/static/app.css">
-  <script defer src="/static/app.js"></script>
+  <link rel="stylesheet" href="/static/app.css?v=20261119d">
+  <script defer src="/static/app.js?v=20261119d"></script>
 </head>
 <body>
 <header class="site-header">
@@ -40,6 +40,7 @@
   {{else if eq .Page "auth"}}{{template "auth-content" .}}
   {{else if eq .Page "dashboard"}}{{template "dashboard-content" .}}
   {{else if eq .Page "surat_form"}}{{template "surat-form-content" .}}
+  {{else if eq .Page "surat_edit"}}{{template "surat-edit-content" .}}
   {{else if eq .Page "complaint_form"}}{{template "complaint-form-content" .}}
   {{else if eq .Page "tracking"}}{{template "tracking-content" .}}
   {{else if eq .Page "admin"}}{{template "admin-content" .}}{{end}}

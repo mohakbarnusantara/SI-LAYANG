@@ -14,6 +14,26 @@ import (
 	"time"
 )
 
+func TestSubjectValueFallsBackToSpecific(t *testing.T) {
+	req := SuratRequest{
+		Applicant: map[string]string{"nama": "Rasya"},
+		Specific:  map[string]string{"Status perkawinan": "Belum pernah menikah", "Pekerjaan": "Sales"},
+	}
+	if got := subjectValue(req, "status_perkawinan"); got != "Belum pernah menikah" {
+		t.Fatalf("status_perkawinan = %q", got)
+	}
+	applicant := map[string]string{"pekerjaan": "Guru"}
+	mergeSpecificIntoApplicant(applicant, req.Specific)
+	if applicant["status_perkawinan"] != "Belum pernah menikah" || applicant["pekerjaan"] != "Guru" {
+		t.Fatalf("merge salah: %#v", applicant)
+	}
+	for _, f := range serviceFields("SK-BELUM-MENIKAH") {
+		if isApplicantField(f) {
+			t.Fatalf("field duplikat %q masih tampil di data khusus layanan", f)
+		}
+	}
+}
+
 func TestPasswordHash(t *testing.T) {
 	hash := hashPassword("contoh-kata-sandi")
 	if !verifyPassword(hash, "contoh-kata-sandi") {
@@ -868,5 +888,164 @@ func TestIncomeLetterFieldsAndRendering(t *testing.T) {
 		if !strings.Contains(docStr, expected) {
 			t.Errorf("document.html tidak memuat %q", expected)
 		}
+	}
+}
+
+func TestLetterRevisionAndEdit(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "data.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := User{
+		ID: "user-rev", NIK: "7271010101900002", Name: "Warga Revisi",
+		Role: "warga", AccountStatus: "aktif",
+	}
+	staff := User{
+		ID: "staff-rev", NIK: "7271010101800009", Name: "Staf Pemeriksa",
+		Role: "staf", AccountStatus: "aktif", OfficeDistrict: "Palu Selatan", OfficeNeighborhood: "Tatura Utara",
+	}
+	request := SuratRequest{
+		ID: "letter-rev-1", TrackingCode: "REQ-REV-001", UserID: user.ID,
+		ServiceCode: "SK-EKONOMI-LEMAH", ServiceName: "Surat Keterangan Ekonomi Lemah",
+		District: "Palu Selatan", Neighborhood: "Tatura Utara",
+		Applicant: map[string]string{
+			"nama": "Warga Revisi", "nik": "7271010101900002", "agama": "Lainnya",
+			"alamat": "Jl. Anoa", "jenis_kelamin": "Laki-laki", "tempat_lahir": "Palu", "tanggal_lahir": "1995-01-01",
+		},
+		Purpose: "Bantuan UKT", RTLetterNumber: "01/RT-01/2026",
+		Status: "perlu_revisi", AdminNote: "kasih betul agama dan alasan nya",
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	if err := store.update(func(db *database) error {
+		db.Users[user.ID] = user
+		db.Users[staff.ID] = staff
+		db.Requests[request.ID] = request
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{
+		store: store, secret: []byte("test-secret"), uploadDir: t.TempDir(),
+		templates: template.Must(template.New("").Funcs(template.FuncMap{
+			"roleName": func(role string) string { return role },
+			"statusName": statusName,
+			"statusClass": func(s string) string { return s },
+			"fieldKey": fieldKey,
+			"join": strings.Join,
+			"date": func(v time.Time) string { return v.Format("02 Jan 2006, 15:04") },
+			"lookupUser": func(id string) User { return store.snapshot().Users[id] },
+			"isDateField": func(field string) bool { return strings.Contains(strings.ToLower(field), "tanggal") },
+			"isRevisionField": isRevisionField,
+			"serviceFields":   serviceFields,
+			"subjectValue":     subjectValue,
+			"isApplicantField": isApplicantField,
+			"isRevised":        isRevisedByResident,
+		}).ParseGlob(filepath.Join("templates", "*.html"))),
+	}
+
+	// 0. Staf melihat panel admin: data lengkap tampil & surat terbaru di atas
+	older := request
+	older.ID, older.TrackingCode, older.Status = "letter-old", "REQ-OLD-000", "selesai"
+	older.CreatedAt = time.Now().Add(-48 * time.Hour)
+	if err := store.update(func(db *database) error { db.Requests[older.ID] = older; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	staffRec := httptest.NewRecorder()
+	if err := app.setSession(staffRec, staff.ID); err != nil {
+		t.Fatal(err)
+	}
+	adminReq := httptest.NewRequest("GET", "/admin", nil)
+	adminReq.AddCookie(staffRec.Result().Cookies()[0])
+	adminRec := httptest.NewRecorder()
+	app.adminPage(adminRec, adminReq)
+	adminBody := adminRec.Body.String()
+	if adminRec.Code != http.StatusOK {
+		t.Fatalf("adminPage gagal: code=%d body=%q", adminRec.Code, adminBody)
+	}
+	for _, want := range []string{"Lihat data lengkap pemohon", "Bantuan UKT", "Lainnya", "Jl. Anoa", "1995-01-01", "Status perkawinan", "Belum direvisi warga"} {
+		if !strings.Contains(adminBody, want) {
+			t.Errorf("panel admin tidak menampilkan %q", want)
+		}
+	}
+	if strings.Index(adminBody, "REQ-REV-001") > strings.Index(adminBody, "REQ-OLD-000") {
+		t.Errorf("surat terbaru seharusnya tampil paling atas")
+	}
+	if err := store.update(func(db *database) error { delete(db.Requests, older.ID); return nil }); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Cek warga membuka halaman perbaikan surat GET /surat/{id}/edit
+	cookieRec := httptest.NewRecorder()
+	if err := app.setSession(cookieRec, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	sessionCookie := cookieRec.Result().Cookies()[0]
+
+	getReq := httptest.NewRequest("GET", "/surat/"+request.ID+"/edit", nil)
+	getReq.SetPathValue("id", request.ID)
+	getReq.AddCookie(sessionCookie)
+	getRec := httptest.NewRecorder()
+	app.editSuratPage(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("editSuratPage gagal: code=%d body=%q", getRec.Code, getRec.Body.String())
+	}
+	if !strings.Contains(getRec.Body.String(), "kasih betul agama dan alasan nya") {
+		t.Errorf("halaman edit tidak menampilkan catatan petugas")
+	}
+	if !strings.Contains(getRec.Body.String(), "field-revision-highlight") {
+		t.Errorf("halaman edit tidak menandai kolom yang perlu diperbaiki dengan field-revision-highlight")
+	}
+	if !strings.Contains(getRec.Body.String(), "Perlu Diperbaiki") {
+		t.Errorf("halaman edit tidak menampilkan badge Perlu Diperbaiki")
+	}
+
+	// 2. Warga mengirimkan perbaikan POST /surat/{id}/edit
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writer.WriteField("kecamatan", "Palu Selatan")
+	writer.WriteField("kelurahan", "Tatura Utara")
+	writer.WriteField("service_code", "SK-EKONOMI-LEMAH")
+	writer.WriteField("applicant_nama", "Warga Revisi")
+	writer.WriteField("applicant_nik", "7271010101900002")
+	writer.WriteField("applicant_agama", "Islam")
+	writer.WriteField("applicant_jenis_kelamin", "Laki-laki")
+	writer.WriteField("applicant_tempat_lahir", "Palu")
+	writer.WriteField("applicant_tanggal_lahir", "1995-01-01")
+	writer.WriteField("applicant_pekerjaan", "Mahasiswa")
+	writer.WriteField("applicant_alamat", "Jl. Anoa No. 12")
+	writer.WriteField("keperluan", "Keringanan Biaya Kuliah Semester 3")
+	writer.WriteField("rt_letter_number", "01/RT-01/2026")
+	writer.Close()
+
+	postReq := httptest.NewRequest("POST", "/surat/"+request.ID+"/edit", &body)
+	postReq.Header.Set("Content-Type", writer.FormDataContentType())
+	postReq.SetPathValue("id", request.ID)
+	postReq.AddCookie(sessionCookie)
+	postRec := httptest.NewRecorder()
+	app.updateSurat(postRec, postReq)
+
+	if postRec.Code != http.StatusSeeOther {
+		t.Fatalf("updateSurat gagal: code=%d body=%q", postRec.Code, postRec.Body.String())
+	}
+
+	updated := store.snapshot().Requests[request.ID]
+	if updated.Status != "pending_verifikasi" {
+		t.Fatalf("status setelah perbaikan = %q, ingin pending_verifikasi", updated.Status)
+	}
+	if updated.Applicant["agama"] != "Islam" || updated.Purpose != "Keringanan Biaya Kuliah Semester 3" {
+		t.Fatalf("data surat yang diperbaiki salah: %#v", updated)
+	}
+	if updated.RevisionCount != 1 || updated.RevisedAt == nil {
+		t.Fatalf("metadata revisi tidak tercatat: count=%d revised_at=%v", updated.RevisionCount, updated.RevisedAt)
+	}
+
+	// 3. Staf melihat ulang panel admin: harus jelas tertulis sudah direvisi warga
+	adminReq2 := httptest.NewRequest("GET", "/admin", nil)
+	adminReq2.AddCookie(staffRec.Result().Cookies()[0])
+	adminRec2 := httptest.NewRecorder()
+	app.adminPage(adminRec2, adminReq2)
+	if !strings.Contains(adminRec2.Body.String(), "Sudah direvisi warga") {
+		t.Errorf("panel admin tidak menampilkan penanda 'Sudah direvisi warga' setelah warga mengirim perbaikan")
 	}
 }

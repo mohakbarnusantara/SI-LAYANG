@@ -423,8 +423,8 @@ document.addEventListener("DOMContentLoaded", () => {
   attachIdentityFormValidation(registerForm, registerError, "Periksa kembali data pendaftaran Anda:");
   attachIdentityFormValidation(reverifyForm, reverifyError, "Periksa kembali data perbaikan Anda:");
 
-  const letterForm = document.getElementById("letter-form");
-  if (letterForm) {
+  const attachLetterFormValidation = (form) => {
+    if (!form) return;
     const nameRegex = /^[A-Za-z]+(?:(?:\.?, ?|\. ?|[ '\-])[A-Za-z]+)*\.?$/;
     const getFieldLabel = (field) => {
       if (field.dataset.fieldLabel) return field.dataset.fieldLabel;
@@ -464,15 +464,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
 
-    letterForm.addEventListener("input", (event) => {
+    form.addEventListener("input", (event) => {
       if (event.target instanceof HTMLElement) clearLetterFieldState(event.target);
     });
-    letterForm.addEventListener("change", (event) => {
+    form.addEventListener("change", (event) => {
       if (event.target instanceof HTMLElement) clearLetterFieldState(event.target);
     });
 
-    const validateLetterForm = () => {
-      const fields = Array.from(letterForm.querySelectorAll("input, select, textarea"));
+    const validateForm = () => {
+      const fields = Array.from(form.querySelectorAll("input, select, textarea"));
       let firstInvalid = null;
       fields.forEach((field) => {
         const message = getLetterFieldError(field);
@@ -495,8 +495,139 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     };
 
-    letterForm.addEventListener("submit", (event) => {
-      if (!validateLetterForm()) event.preventDefault();
+    form.addEventListener("submit", (event) => {
+      if (!validateForm()) event.preventDefault();
     });
+  };
+
+  attachLetterFormValidation(document.getElementById("letter-form"));
+  attachLetterFormValidation(document.getElementById("letter-edit-form"));
+
+  const editForm = document.getElementById("letter-edit-form");
+  if (editForm) {
+    const noteEl = document.querySelector(".alert strong + p, .record-revision-note");
+    const noteText = (noteEl?.textContent || "").toLowerCase().trim();
+
+    if (noteText) {
+      const matchers = [
+        {
+          terms: ["agama", "kepercayaan"],
+          targets: ['[name="applicant_agama"]', '[name="specific_agama_anak"]'],
+        },
+        {
+          terms: ["alasan", "tujuan", "keperluan", "maksud"],
+          targets: ['[name="keperluan"]'],
+        },
+        {
+          terms: ["nama orang tua", "nama ayah", "nama ibu", "nama pemohon"],
+          targets: ['[name="applicant_nama"]'],
+        },
+        {
+          terms: ["nama anak"],
+          targets: ['[name="specific_nama_anak"]'],
+        },
+        {
+          terms: ["nik anak"],
+          targets: ['[name="specific_nik_anak"]'],
+        },
+        {
+          terms: ["nik", "nomor induk"],
+          targets: ['[name="applicant_nik"]', '[name="specific_nik_anak"]'],
+        },
+        {
+          terms: ["tempat lahir", "ttl", "tanggal lahir", "tgl lahir", "tempat/tgl", "tempat", "tanggal", "tgl"],
+          targets: ['[name="applicant_tempat_lahir"]', '[name="applicant_tanggal_lahir"]', '[name="specific_tempat_lahir_anak"]', '[name="specific_tanggal_lahir_anak"]'],
+        },
+        {
+          terms: ["kelamin", "gender"],
+          targets: ['[name="applicant_jenis_kelamin"]', '[name="specific_jenis_kelamin_anak"]'],
+        },
+        {
+          terms: ["pekerjaan", "profesi", "kerja"],
+          targets: ['[name="applicant_pekerjaan"]', '[name="specific_pekerjaan_anak"]'],
+        },
+        {
+          terms: ["status", "kawin", "perkawinan", "menikah"],
+          targets: ['[name="applicant_status_perkawinan"]', '[name="specific_status_perkawinan_anak"]'],
+        },
+        {
+          terms: ["alamat", "domisili", "tempat tinggal", "rumah"],
+          targets: ['[name="applicant_alamat"]', '[name="specific_alamat_anak"]'],
+        },
+        {
+          terms: ["penghasilan", "gaji", "upah", "pendapatan", "nominal"],
+          targets: ['[name="specific_penghasilan_rata_rata"]'],
+        },
+        {
+          terms: ["sumber", "usaha"],
+          targets: ['[name="specific_sumber_penghasilan"]'],
+        },
+        {
+          terms: ["nomor rt", "no rt", "surat rt", "pengantar rt", "nomor pengantar"],
+          targets: ['[name="rt_letter_number"]'],
+        },
+        {
+          terms: ["lampiran", "berkas", "scan", "foto", "ktp", "dokumen", "upload", "unggah", "file"],
+          targets: ['[name="rt_attachment"]', '[name="extra_attachment"]'],
+        },
+      ];
+
+      if (noteText.includes("nama") && !noteText.includes("anak")) {
+        matchers.push({ terms: ["nama"], targets: ['[name="applicant_nama"]'] });
+      }
+
+      const highlightedInputs = new Set();
+      matchers.forEach(({ terms, targets }) => {
+        if (terms.some((t) => noteText.includes(t))) {
+          targets.forEach((sel) => {
+            editForm.querySelectorAll(sel).forEach((el) => highlightedInputs.add(el));
+          });
+        }
+      });
+
+      highlightedInputs.forEach((input) => {
+        const label = input.closest("label");
+        if (!label) return;
+        label.classList.add("field-revision-highlight");
+        input.classList.add("input-revision-needed");
+
+        let badge = label.querySelector(".badge-revision-needed");
+        if (!badge) {
+          badge = document.createElement("span");
+          badge.className = "badge-revision-needed";
+          badge.textContent = "⚠️ Perlu Diperbaiki";
+          label.insertBefore(badge, label.firstChild.nextSibling || input);
+        }
+
+        let hint = label.querySelector(".revision-hint-text");
+        if (!hint) {
+          hint = document.createElement("small");
+          hint.className = "revision-hint-text";
+          hint.textContent = "⚠️ Kolom ini ditandai oleh petugas kelurahan untuk diperbaiki.";
+          label.append(hint);
+        }
+
+        const onEdit = () => {
+          if (input.value.trim() !== "") {
+            badge.className = "badge-revision-resolved";
+            badge.textContent = "✓ Telah Diedit";
+            hint.textContent = "✓ Perubahan telah dimasukkan.";
+            hint.style.color = "#047857";
+            input.classList.remove("input-revision-needed");
+            input.classList.add("input-revision-resolved");
+          }
+        };
+        input.addEventListener("input", onEdit);
+        input.addEventListener("change", onEdit);
+      });
+
+      const first = Array.from(highlightedInputs)[0];
+      if (first) {
+        setTimeout(() => {
+          first.scrollIntoView({ behavior: "smooth", block: "center" });
+          first.focus({ preventScroll: true });
+        }, 350);
+      }
+    }
   }
 });

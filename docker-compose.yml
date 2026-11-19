@@ -1,0 +1,14 @@
+services:
+  silayang:
+    build: .
+    container_name: silayang-app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - SILAYANG_SECRET=silayang-production-secret-key-wajib-diganti-acak
+      - SILAYANG_COOKIE_SECURE=false # ubah ke true jika sudah menggunakan domain HTTPS/SSL
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads

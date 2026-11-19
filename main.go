@@ -77,6 +77,8 @@ type SuratRequest struct {
 	OfficialNumber string            `json:"official_number,omitempty"`
 	Status         string            `json:"status"`
 	AdminNote      string            `json:"admin_note,omitempty"`
+	RevisionCount  int               `json:"revision_count,omitempty"`
+	RevisedAt      *time.Time        `json:"revised_at,omitempty"`
 	CreatedAt      time.Time         `json:"created_at"`
 	UpdatedAt      time.Time         `json:"updated_at"`
 }
@@ -213,6 +215,7 @@ type PageData struct {
 	Error         string
 	Notice        string
 	Services      []Service
+	Service       *Service
 	Categories    []string
 	Requests      []SuratRequest
 	Complaints    []Complaint
@@ -439,6 +442,12 @@ func main() {
 		"join":       strings.Join,
 		"date":       func(t time.Time) string { return t.Format("02 Jan 2006, 15:04") },
 		"lookupUser": func(id string) User { return store.snapshot().Users[id] },
+		"isDateField": func(field string) bool { return strings.Contains(strings.ToLower(field), "tanggal") },
+		"isRevisionField": isRevisionField,
+		"serviceFields":   serviceFields,
+		"subjectValue":     subjectValue,
+		"isApplicantField": isApplicantField,
+		"isRevised":        isRevisedByResident,
 	}).ParseGlob(filepath.Join("templates", "*.html"))
 	if err != nil {
 		log.Fatalf("memuat template: %v", err)
@@ -458,6 +467,8 @@ func main() {
 	mux.HandleFunc("POST /akun/verifikasi-ulang", app.resubmitVerification)
 	mux.HandleFunc("GET /surat/baru", app.newSuratPage)
 	mux.HandleFunc("POST /surat", app.createSurat)
+	mux.HandleFunc("GET /surat/{id}/edit", app.editSuratPage)
+	mux.HandleFunc("POST /surat/{id}/edit", app.updateSurat)
 	mux.HandleFunc("GET /aduan/baru", app.newComplaintPage)
 	mux.HandleFunc("POST /aduan", app.createComplaint)
 	mux.HandleFunc("GET /tracking", app.tracking)
@@ -469,7 +480,15 @@ func main() {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("GET /uploads/{name}", app.upload)
 
-	addr := envOr("SILAYANG_ADDR", ":8080")
+	port := os.Getenv("PORT")
+	defaultAddr := ":8080"
+	if port != "" {
+		if !strings.HasPrefix(port, ":") {
+			port = ":" + port
+		}
+		defaultAddr = port
+	}
+	addr := envOr("SILAYANG_ADDR", defaultAddr)
 	displayAddr := addr
 	if strings.HasPrefix(addr, ":") {
 		displayAddr = "localhost" + addr
@@ -999,6 +1018,7 @@ func (a *App) createSurat(w http.ResponseWriter, r *http.Request) {
 			specific[field] = value
 		}
 	}
+	mergeSpecificIntoApplicant(applicant, specific)
 	attachments := []string{}
 	for _, field := range []string{"rt_attachment", "extra_attachment"} {
 		path, err := a.saveUpload(r, field, "image/jpeg", "image/png", "application/pdf")
@@ -1026,6 +1046,191 @@ func (a *App) createSurat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/dashboard?notice=request-created", http.StatusSeeOther)
+}
+
+func (a *App) editSuratPage(w http.ResponseWriter, r *http.Request) {
+	user := a.requireActiveResident(w, r)
+	if user == nil {
+		return
+	}
+	id := r.PathValue("id")
+	snapshot := a.store.snapshot()
+	request, ok := snapshot.Requests[id]
+	if !ok || request.UserID != user.ID {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+	if request.Status != "perlu_revisi" {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+	service := serviceByCode(request.ServiceCode)
+	a.render(w, http.StatusOK, "surat_edit", PageData{
+		Title:         "Perbaiki permohonan surat",
+		User:          user,
+		Request:       &request,
+		Service:       service,
+		Services:      services,
+		Districts:     letterDistrictNames,
+		Neighborhoods: letterNeighborhoods(),
+	})
+}
+
+func (a *App) updateSurat(w http.ResponseWriter, r *http.Request) {
+	user := a.requireActiveResident(w, r)
+	if user == nil {
+		return
+	}
+	id := r.PathValue("id")
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		a.renderEditFormError(w, id, "Ukuran berkas melebihi batas 5 MB atau formulir tidak valid.", user)
+		return
+	}
+	snapshot := a.store.snapshot()
+	existing, ok := snapshot.Requests[id]
+	if !ok || existing.UserID != user.ID {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+	if existing.Status != "perlu_revisi" {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+
+	service := serviceByCode(existing.ServiceCode)
+	if service == nil {
+		a.renderEditFormError(w, id, "Layanan surat tidak valid.", user)
+		return
+	}
+
+	district := strings.TrimSpace(r.FormValue("kecamatan"))
+	neighborhood := strings.TrimSpace(r.FormValue("kelurahan"))
+	if district == "" || neighborhood == "" {
+		district = existing.District
+		neighborhood = existing.Neighborhood
+	}
+	if _, ok := letterOffice(district, neighborhood); !ok {
+		a.renderEditFormError(w, id, "Pilih kecamatan dan kelurahan yang valid.", user)
+		return
+	}
+
+	purpose := strings.TrimSpace(r.FormValue("keperluan"))
+	if purpose == "" && service.Code == "SK-PENGHASILAN" {
+		purpose = "Surat Keterangan Penghasilan Orang Tua"
+	}
+	if purpose == "" {
+		a.renderEditFormError(w, id, "Tujuan atau keperluan surat wajib diisi.", user)
+		return
+	}
+
+	rtNumber := strings.TrimSpace(r.FormValue("rt_letter_number"))
+	if rtNumber == "" {
+		a.renderEditFormError(w, id, "Nomor surat pengantar RT wajib diisi.", user)
+		return
+	}
+
+	applicant := make(map[string]string)
+	for _, key := range []string{"nama", "nik", "tempat_lahir", "tanggal_lahir", "jenis_kelamin", "agama", "status_perkawinan", "kewarganegaraan", "pekerjaan", "alamat"} {
+		value := strings.TrimSpace(r.FormValue("applicant_" + key))
+		if value != "" {
+			applicant[key] = value
+		} else if existing.Applicant[key] != "" {
+			applicant[key] = existing.Applicant[key]
+		}
+	}
+	if applicant["kewarganegaraan"] == "" {
+		applicant["kewarganegaraan"] = "Indonesia"
+	}
+
+	if service.Code == "SK-PENGHASILAN" {
+		if applicant["nama"] == "" || applicant["nik"] == "" || len(applicant["nik"]) > 16 {
+			a.renderEditFormError(w, id, "Nama dan NIK orang tua wajib diisi (maks. 16 karakter).", user)
+			return
+		}
+	} else {
+		if applicant["nama"] == "" || len(applicant["nik"]) != 16 || !digitsOnly(applicant["nik"]) {
+			a.renderEditFormError(w, id, "Nama dan NIK subjek surat wajib diisi; NIK harus 16 digit.", user)
+			return
+		}
+	}
+
+	specific := map[string]string{}
+	for _, field := range service.Fields {
+		key := fieldKey(field)
+		if value := strings.TrimSpace(r.FormValue("specific_" + key)); value != "" {
+			specific[field] = value
+		} else if existing.Specific[field] != "" {
+			specific[field] = existing.Specific[field]
+		}
+	}
+	mergeSpecificIntoApplicant(applicant, specific)
+
+	attachments := existing.Attachments
+	for i, field := range []string{"rt_attachment", "extra_attachment"} {
+		path, err := a.saveUpload(r, field, "image/jpeg", "image/png", "application/pdf")
+		if err != nil && !errors.Is(err, http.ErrMissingFile) {
+			a.renderEditFormError(w, id, err.Error(), user)
+			return
+		}
+		if path != "" {
+			if i == 0 {
+				if len(attachments) > 0 {
+					attachments[0] = path
+				} else {
+					attachments = append(attachments, path)
+				}
+			} else {
+				if len(attachments) > 1 {
+					attachments[1] = path
+				} else {
+					attachments = append(attachments, path)
+				}
+			}
+		}
+	}
+
+	now := time.Now()
+	err := a.store.update(func(db *database) error {
+		req, exists := db.Requests[id]
+		if !exists || req.UserID != user.ID {
+			return errors.New("permohonan surat tidak ditemukan")
+		}
+		req.District = district
+		req.Neighborhood = neighborhood
+		req.Purpose = purpose
+		req.RTLetterNumber = rtNumber
+		req.Applicant = applicant
+		req.Specific = specific
+		req.Attachments = attachments
+		req.Status = "pending_verifikasi"
+		req.RevisionCount++
+		revisedAt := now
+		req.RevisedAt = &revisedAt
+		req.UpdatedAt = now
+		db.Requests[id] = req
+		return nil
+	})
+	if err != nil {
+		a.renderEditFormError(w, id, "Gagal menyimpan perbaikan permohonan: "+err.Error(), user)
+		return
+	}
+	http.Redirect(w, r, "/dashboard?notice=request-updated", http.StatusSeeOther)
+}
+
+func (a *App) renderEditFormError(w http.ResponseWriter, id, message string, user *User) {
+	snapshot := a.store.snapshot()
+	request := snapshot.Requests[id]
+	service := serviceByCode(request.ServiceCode)
+	a.render(w, http.StatusBadRequest, "surat_edit", PageData{
+		Title:         "Perbaiki permohonan surat",
+		User:          user,
+		Request:       &request,
+		Service:       service,
+		Services:      services,
+		Districts:     letterDistrictNames,
+		Neighborhoods: letterNeighborhoods(),
+		Error:         message,
+	})
 }
 
 func (a *App) newComplaintPage(w http.ResponseWriter, r *http.Request) {
@@ -1120,9 +1325,10 @@ func (a *App) adminPage(w http.ResponseWriter, r *http.Request) {
 	for _, complaint := range snapshot.Complaints {
 		data.Complaints = append(data.Complaints, complaint)
 	}
-	sort.Slice(data.Residents, func(i, j int) bool { return data.Residents[i].CreatedAt.Before(data.Residents[j].CreatedAt) })
-	sort.Slice(data.Requests, func(i, j int) bool { return data.Requests[i].CreatedAt.Before(data.Requests[j].CreatedAt) })
-	sort.Slice(data.Complaints, func(i, j int) bool { return data.Complaints[i].CreatedAt.Before(data.Complaints[j].CreatedAt) })
+	// Urutkan terbaru di atas (paling akhir masuk ditampilkan pertama).
+	sort.Slice(data.Residents, func(i, j int) bool { return data.Residents[i].CreatedAt.After(data.Residents[j].CreatedAt) })
+	sort.Slice(data.Requests, func(i, j int) bool { return data.Requests[i].CreatedAt.After(data.Requests[j].CreatedAt) })
+	sort.Slice(data.Complaints, func(i, j int) bool { return data.Complaints[i].CreatedAt.After(data.Complaints[j].CreatedAt) })
 	a.render(w, http.StatusOK, "admin", data)
 }
 
@@ -1491,6 +1697,22 @@ func (a *App) saveUpload(r *http.Request, field string, allowedTypes ...string) 
 	return "/uploads/" + name, nil
 }
 
+// serviceFields mengembalikan field khusus layanan (sesuai urutan formulir) yang
+// bukan duplikat kolom data subjek, karena kolom tersebut sudah tampil di bagian data subjek.
+func serviceFields(code string) []string {
+	service := serviceByCode(code)
+	if service == nil {
+		return nil
+	}
+	fields := []string{}
+	for _, field := range service.Fields {
+		if !isApplicantField(field) {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
 func serviceByCode(code string) *Service {
 	for i := range services {
 		if services[i].Code == code {
@@ -1511,6 +1733,45 @@ func fieldKey(value string) string {
 		}
 	}
 	return strings.Trim(b.String(), "_")
+}
+
+// applicantKeys adalah kolom data subjek standar yang disimpan di Applicant.
+var applicantKeys = map[string]bool{
+	"nama": true, "nik": true, "tempat_lahir": true, "tanggal_lahir": true, "jenis_kelamin": true,
+	"agama": true, "status_perkawinan": true, "kewarganegaraan": true, "pekerjaan": true, "alamat": true,
+}
+
+// isApplicantField true bila field khusus layanan sebenarnya sama dengan kolom data subjek
+// (mis. "Status perkawinan" pada Surat Belum Menikah).
+func isApplicantField(field string) bool { return applicantKeys[fieldKey(field)] }
+
+// mergeSpecificIntoApplicant menyalin field khusus layanan yang identik dengan data subjek
+// ke Applicant, supaya data subjek (dan dokumen surat) terisi lengkap.
+func mergeSpecificIntoApplicant(applicant, specific map[string]string) {
+	for field, value := range specific {
+		key := fieldKey(field)
+		if applicantKeys[key] && value != "" && applicant[key] == "" {
+			applicant[key] = value
+		}
+	}
+}
+
+// subjectValue membaca data subjek, dengan cadangan dari field khusus layanan (untuk data lama).
+func subjectValue(request SuratRequest, key string) string {
+	if v := strings.TrimSpace(request.Applicant[key]); v != "" {
+		return v
+	}
+	for field, value := range request.Specific {
+		if fieldKey(field) == key && strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// isRevisedByResident true jika permohonan sudah pernah direvisi warga dan sedang menunggu tinjauan ulang staf.
+func isRevisedByResident(request SuratRequest) bool {
+	return request.Status == "pending_verifikasi" && (request.RevisionCount > 0 || strings.TrimSpace(request.AdminNote) != "")
 }
 
 func trackingCode(prefix string) string {
@@ -1581,6 +1842,7 @@ func noticeFor(code string) string {
 		"pending":                  "Pendaftaran berhasil. Akun Anda menunggu verifikasi staf kelurahan.",
 		"reverification-submitted": "Perbaikan data berhasil dikirim. Akun Anda kembali menunggu verifikasi staf kelurahan.",
 		"request-created":          "Permohonan surat berhasil dikirim. Simpan kode tracking untuk memantau proses.",
+		"request-updated":          "Perbaikan permohonan surat berhasil dikirim. Permohonan Anda kembali menunggu verifikasi petugas.",
 		"complaint-created":        "Aduan berhasil dikirim. Simpan kode tracking untuk melihat tindak lanjut.",
 		"resident-reviewed":        "Verifikasi akun warga berhasil diperbarui.",
 		"request-reviewed":         "Status permohonan surat berhasil diperbarui.",
@@ -1619,6 +1881,46 @@ func statusName(status string) string {
 		return label
 	}
 	return status
+}
+
+func isRevisionField(note, fieldName string) bool {
+	lower := strings.ToLower(note)
+	switch fieldName {
+	case "agama":
+		return strings.Contains(lower, "agama") || strings.Contains(lower, "kepercayaan")
+	case "keperluan":
+		return strings.Contains(lower, "alasan") || strings.Contains(lower, "tujuan") || strings.Contains(lower, "keperluan") || strings.Contains(lower, "maksud")
+	case "nama":
+		return strings.Contains(lower, "nama") && !strings.Contains(lower, "anak")
+	case "nama_anak":
+		return strings.Contains(lower, "nama anak") || (strings.Contains(lower, "nama") && strings.Contains(lower, "anak"))
+	case "nik":
+		return strings.Contains(lower, "nik") && !strings.Contains(lower, "anak")
+	case "nik_anak":
+		return strings.Contains(lower, "nik anak") || (strings.Contains(lower, "nik") && strings.Contains(lower, "anak"))
+	case "tempat_lahir":
+		return strings.Contains(lower, "tempat") || strings.Contains(lower, "ttl")
+	case "tanggal_lahir":
+		return strings.Contains(lower, "tanggal") || strings.Contains(lower, "tgl") || strings.Contains(lower, "lahir") || strings.Contains(lower, "ttl")
+	case "jenis_kelamin":
+		return strings.Contains(lower, "kelamin") || strings.Contains(lower, "gender")
+	case "pekerjaan":
+		return strings.Contains(lower, "pekerjaan") || strings.Contains(lower, "kerja") || strings.Contains(lower, "profesi")
+	case "status_perkawinan":
+		return strings.Contains(lower, "status") || strings.Contains(lower, "kawin") || strings.Contains(lower, "menikah")
+	case "alamat":
+		return strings.Contains(lower, "alamat") || strings.Contains(lower, "domisili") || strings.Contains(lower, "tempat tinggal")
+	case "rt_letter_number":
+		return strings.Contains(lower, "rt") || strings.Contains(lower, "nomor") || strings.Contains(lower, "surat rt")
+	case "rt_attachment":
+		return strings.Contains(lower, "lampiran") || strings.Contains(lower, "berkas") || strings.Contains(lower, "scan") || strings.Contains(lower, "foto") || strings.Contains(lower, "ktp") || strings.Contains(lower, "upload") || strings.Contains(lower, "unggah")
+	case "penghasilan":
+		return strings.Contains(lower, "penghasilan") || strings.Contains(lower, "gaji") || strings.Contains(lower, "upah")
+	case "sumber":
+		return strings.Contains(lower, "sumber") || strings.Contains(lower, "usaha")
+	default:
+		return false
+	}
 }
 
 func hashPassword(password string) string {
