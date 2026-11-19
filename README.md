@@ -1,165 +1,196 @@
-# SILAYANG
+# SILAYANG — Sistem Layanan Kelurahan
 
-SILAYANG adalah portal layanan administrasi warga dan kelurahan berbasis Go. Warga dapat mengajukan surat, menyampaikan aduan, dan melacak permohonan. Staf kelurahan dan lurah mengelola layanan sesuai wilayah akun mereka.
+**SILAYANG** adalah aplikasi web layanan administrasi kelurahan berbasis **Go** yang dirancang untuk memudahkan warga dalam mengajukan surat keterangan, menyampaikan aduan, serta memantau status permohonan secara daring. Di sisi internal, aplikasi mendukung alur kerja **Staf Kelurahan** dan **Lurah** sesuai wilayah masing-masing (32 kelurahan se-Kota Palu).
 
-## Mulai cepat
+---
+
+## Anggota Kelompok 11
+
+| No | Nama | NIM |
+| :---: | --- | --- |
+| 1 | Amisha | `F5512510003` |
+| 2 | Muh. Aqsha Syahrir | `F5512510033` |
+| 3 | Moh. Akbar Nusantara | `F5512520037` |
+
+---
+
+## Daftar Isi
+
+- [Fitur Utama](#fitur-utama)
+- [Teknologi & Struktur Proyek](#teknologi--struktur-proyek)
+- [Cara Menjalankan Aplikasi](#cara-menjalankan-aplikasi)
+- [Akun Demo & Pengujian](#akun-demo--pengujian)
+- [Alur Kerja Sistem](#alur-kerja-sistem)
+- [Data, Penyimpanan & Pengaturan](#data-penyimpanan--pengaturan)
+- [Menjalankan Unit Test](#menjalankan-unit-test)
+- [Dokumentasi Diagram UML](#dokumentasi-diagram-uml)
+- [Catatan Keamanan](#catatan-keamanan)
+
+---
+
+## Fitur Utama
+
+- **Registrasi & Verifikasi Akun Warga**: Pendaftaran warga dilengkapi unggah foto KTP, validasi format input, serta alur penolakan bersebab dan verifikasi ulang jika data ditolak staf.
+- **30 Jenis Layanan Surat**: Mencakup pengajuan untuk diri sendiri maupun orang lain/anggota keluarga, termasuk form terstruktur (seperti *Surat Keterangan Penghasilan* dengan data orang tua, data anak, dan rincian penghasilan).
+- **Alur Revisi Surat Dua Arah**:
+  - Staf dapat meminta revisi beserta catatan perbaikan.
+  - Warga mendapat tombol **Perbaiki surat**, dengan **penanda warna merah otomatis** pada kolom yang perlu diperbaiki (berubah hijau setelah diedit).
+  - Panel admin menampilkan status jelas (**Belum direvisi warga** / **Sudah direvisi warga**) serta rincian lengkap data pemohon dan surat terbaru di urutan paling atas.
+- **Persetujuan Lurah & Cetak PDF**: Staf menyiapkan draf dengan nomor surat resmi, lalu lurah meninjau draf A4 berkop dinamis kelurahan dan menyetujui dokumen hingga siap dicetak/disimpan PDF oleh warga.
+- **Aduan & Pelacakan Publik**: Warga dapat mengirim aduan beserta bukti, sementara status surat dan aduan dapat dipantau lewat dashboard maupun halaman `/tracking` menggunakan kode pelacakan (`REQ-...` / `ADU-...`).
+
+---
+
+## Teknologi & Struktur Proyek
+
+- **Backend**: Go (`net/http`, `html/template`, penyimpanan file JSON dengan `sync.RWMutex`)
+- **Frontend**: HTML Templates, CSS responsif (desktop & mobile), Vanilla JavaScript
+
+```text
+si-layang/
+├── main.go                 # Server HTTP, routing, logika bisnis, model & store JSON
+├── main_test.go            # Unit test & integration test alur aplikasi
+├── go.mod                  # Definisi modul Go
+├── Dockerfile              # Konfigurasi container Docker
+├── docker-compose.yml      # Orkestrasi container
+├── static/
+│   ├── app.css             # Stylesheet utama & tampilan responsif
+│   └── app.js              # Interaktivitas form, validasi & highlight revisi
+├── templates/
+│   ├── layout.html         # Kerangka layout utama
+│   ├── home.html           # Halaman beranda
+│   ├── auth.html           # Halaman masuk & daftar akun
+│   ├── dashboard.html      # Dashboard warga / ringkasan petugas
+│   ├── surat_form.html     # Form pengajuan 30 layanan surat
+│   ├── surat_edit.html     # Form perbaikan (revisi) surat warga
+│   ├── complaint_form.html # Form pengajuan aduan warga
+│   ├── tracking.html       # Halaman lacak status permohonan/aduan
+│   ├── admin.html          # Panel administrasi staf & lurah
+│   └── document.html       # Pratinjau & cetak dokumen surat resmi A4
+├── data/                   # Penyimpanan data JSON (dibuat otomatis)
+└── uploads/                # Berkas unggahan KTP & lampiran (dibuat otomatis)
+```
+
+---
+
+## Cara Menjalankan Aplikasi
 
 ### Persyaratan
 
-- Go **1.22 atau lebih baru**.
+- **Go 1.22** atau lebih baru (tidak memerlukan database eksternal maupun paket pihak ketiga).
 - PowerShell di Windows, Terminal di macOS/Linux, atau terminal bawaan VS Code.
-- Tidak perlu memasang database atau paket tambahan.
 
-Periksa Go:
+Periksa versi Go:
 
 ```powershell
 go version
 ```
 
-### Jalankan aplikasi
+### Menjalankan Secara Lokal
 
-1. Buka folder proyek di VS Code.
-2. Buka terminal (**Terminal → New Terminal**). Pastikan terminal berada di folder yang berisi `go.mod`.
-3. Jalankan:
+1. Buka folder proyek dan pastikan terminal berada di direktori yang berisi `go.mod`.
+2. Jalankan perintah berikut:
 
    ```powershell
    go run .
    ```
 
-4. Tunggu sampai terminal menampilkan alamat aplikasi, lalu buka **http://localhost:8080** di browser.
-5. Untuk menghentikan aplikasi, kembali ke terminal dan tekan **Ctrl+C**.
+3. Buka **http://localhost:8080** di browser.
+4. Tekan **Ctrl+C** di terminal untuk menghentikan server.
 
-Jalankan `go run .` dari folder proyek, bukan dengan membuka `main.go` langsung. Aplikasi membuat folder data dan unggahan jika belum tersedia.
-
-### Jika port 8080 sedang digunakan
-
-Pilih port lain sebelum menjalankan aplikasi:
+### Mengganti Port (Jika Port 8080 Terpakai)
 
 ```powershell
 $env:SILAYANG_ADDR = ":8081"
 go run .
 ```
 
-Lalu buka **http://localhost:8081**.
+Lalu akses **http://localhost:8081**.
 
-### Buat file aplikasi (opsional)
-
-Untuk mengompilasi aplikasi menjadi file `.exe`:
+### Build ke Binary (Opsional)
 
 ```powershell
 go build -o silayang.exe .
 .\silayang.exe
 ```
 
-## Masuk dan mencoba aplikasi
+---
 
-Kata sandi awal akun demo adalah **`silayang123`**.
+## Akun Demo & Pengujian
 
-| Peran | Email demo | Catatan |
+Semua akun bawaan menggunakan kata sandi awal: **`silayang123`**.
+
+| Peran | Email | Keterangan |
 | --- | --- | --- |
-| Warga | `warga@silayang.local` | Akun demo aktif |
-| Staf | `staf@silayang.local` | Akun lama, dibatasi ke Kelurahan Talise |
-| Lurah | `lurah@silayang.local` | Akun lama, dibatasi ke Kelurahan Talise |
+| Warga | `warga@silayang.local` | Akun demo warga aktif *(dibuat saat database awal masih kosong)* |
+| Staf | `staf@silayang.local` | Akun demo staf (Kelurahan Talise) |
+| Lurah | `lurah@silayang.local` | Akun demo lurah (Kelurahan Talise) |
 
-Setiap satu dari **32 kelurahan** juga mendapat akun staf dan lurah. Format emailnya:
+Setiap kelurahan dari **32 kelurahan** di Kota Palu juga memiliki akun staf dan lurah yang dibuat otomatis dengan format:
 
 ```text
 staf.<kecamatan>-<kelurahan>@silayang.local
 lurah.<kecamatan>-<kelurahan>@silayang.local
 ```
 
-Contoh akun Tondo:
+Contoh untuk Kelurahan **Talise** (Kec. Mantikulore) dan **Tatura Utara** (Kec. Palu Selatan):
 
 ```text
-staf.mantikulore-tondo@silayang.local
-lurah.mantikulore-tondo@silayang.local
+staf.mantikulore-talise@silayang.local
+lurah.mantikulore-talise@silayang.local
+
+staf.palu-selatan-tatura-utara@silayang.local
+lurah.palu-selatan-tatura-utara@silayang.local
 ```
-
-Semua akun wilayah menggunakan kata sandi awal yang sama, `silayang123`. Akun wilayah dibuat otomatis saat aplikasi dijalankan. Gunakan akun sesuai kelurahan yang ingin diuji.
-
-### Alur singkat
-
-1. **Warga:** masuk dengan akun demo atau daftar akun baru. Saat mendaftar, pilih kecamatan dan kelurahan domisili.
-2. **Verifikasi:** akun baru menunggu persetujuan staf dari kelurahan domisili. Warga dapat mengajukan layanan setelah akun aktif.
-3. **Surat:** warga memilih wilayah dan jenis surat, mengisi kebutuhan, lalu mengirim permohonan. Staf memeriksa dan menyiapkan draft; lurah menyetujuinya. Setelah status surat **Selesai**, warga dapat memilih **Cetak / Simpan PDF** di riwayat surat, lalu memilih **Simpan sebagai PDF** pada dialog cetak browser.
-4. **Aduan:** warga mengirim aduan, lalu memantau tindak lanjutnya melalui dashboard.
-5. **Lacak:** gunakan kode tracking yang diberikan setelah permohonan atau aduan dikirim.
-
-Staf hanya dapat melihat pendaftar, foto KTP, dan permohonan surat untuk kelurahan akunnya. Lurah hanya dapat menyetujui draft surat dari kelurahannya. Data warga lama hanya dipetakan otomatis jika alamatnya menyebut nama kelurahan secara jelas.
-
-## Data dan penyimpanan
-
-Aplikasi **tidak memakai database SQL**. Data akun, surat, dan aduan disimpan dalam file JSON:
-
-```text
-data/silayang.json
-```
-
-Berkas unggahan, seperti foto KTP dan lampiran, disimpan di:
-
-```text
-uploads/
-```
-
-Data tetap ada setelah aplikasi dihentikan. Jangan menghapus atau membagikan file data maupun unggahan jika berisi informasi pribadi.
-
-## Fitur utama
-
-- Pendaftaran dan verifikasi akun warga.
-- 30 jenis layanan surat dan pratinjau draf A4.
-- Pembuatan, pemeriksaan, dan persetujuan surat sesuai wilayah akun.
-- Aduan warga dan pelacakan status.
-- Kop surat dinamis dengan data kantor kelurahan.
-
-QR dan NIP pada dokumen yang disetujui adalah **dummy untuk tampilan saja**. QR tidak dapat dipakai untuk verifikasi dan tanda tangan bukan TTE resmi. Kode tracking tetap digunakan untuk melacak status permohonan.
-
-## Pengaturan opsional
-
-Atur variabel berikut sebelum menjalankan `go run .`:
-
-| Variabel | Nilai bawaan | Fungsi |
-| --- | --- | --- |
-| `SILAYANG_ADDR` | `:8080` | Alamat dan port web server |
-| `SILAYANG_DATA` | `data/silayang.json` | Lokasi file data JSON |
-| `SILAYANG_UPLOADS` | `uploads` | Lokasi penyimpanan unggahan |
-| `SILAYANG_SECRET` | Kunci development bawaan | Kunci sesi login |
-| `SILAYANG_COOKIE_SECURE` | `false` | Gunakan `true` jika aplikasi diakses melalui HTTPS |
-
-Contoh mengatur lokasi data di PowerShell:
-
-```powershell
-$env:SILAYANG_DATA = "data\uji.json"
-go run .
-```
-
-## Menjalankan tes
-
-Dari folder proyek, jalankan:
-
-```powershell
-go test ./...
-```
-
-## Catatan keamanan
-
-Aplikasi ini ditujukan untuk demonstrasi dan pengembangan lokal. Kata sandi bersama, kunci sesi bawaan, HTTP tanpa HTTPS, dan file JSON lokal **tidak cocok untuk deployment produksi**. Layanan nyata memerlukan autentikasi dan pengelolaan kata sandi yang aman, HTTPS, penyimpanan data produksi, backup, serta TTE resmi.
-
-
-
-
-# Dokumentasi Diagram UML — SILAYANG (Sistem Layanan Kelurahan)
-
-Dokumen ini memuat kumpulan diagram **Unified Modeling Language (UML)** untuk sistem **SILAYANG**, yang dirancang sesuai dengan implementasi arsitektur sistem informasi berbasis Go, arsitektur multi-wilayah (32 kelurahan se-Kota Palu), serta alur kerja layanan administrasi publik.
 
 ---
 
-## 1. Use Case Diagram
+## Alur Kerja Sistem
 
-Diagram ini mendefinisikan fungsionalitas sistem dari sudut pandang para aktor: **Publik / Pengunjung**, **Warga**, **Staf Kelurahan**, dan **Lurah**.
+1. **Pendaftaran & Verifikasi Warga**: Warga mendaftar di `/register` sambil memilih kecamatan/kelurahan domisili dan mengunggah foto KTP. Staf kelurahan terkait meninjau pendaftar di `/admin` lalu menyetujui atau menolak (dengan alasan agar warga bisa memperbaiki data).
+2. **Pengajuan & Pemeriksaan Surat**: Warga aktif mengajukan surat di `/surat/baru`. Staf memeriksa data lengkap pemohon di `/admin`, lalu memilih **Siapkan draft** (mengisi nomor surat resmi), **Minta revisi** (warga memperbaiki kolom yang ditandai merah), atau **Tolak**.
+3. **Persetujuan Lurah & Cetak PDF**: Lurah meninjau draf surat di `/admin` → **Tinjau draft ↗**, lalu klik **Setujui**. Setelah status menjadi **Selesai**, warga dapat membuka dokumen dan menyimpannya sebagai PDF lewat dialog cetak browser.
+4. **Aduan & Pelacakan**: Warga mengirim aduan di `/aduan/baru` dan petugas menindaklanjutinya di `/admin`. Status permohonan surat dan aduan dapat dicek kapan saja melalui `/tracking`.
+
+---
+
+## Data, Penyimpanan & Pengaturan
+
+Aplikasi menyimpan seluruh data akun, permohonan surat, dan aduan dalam format JSON tanpa database SQL:
+
+- Data aplikasi: `data/silayang.json`
+- Berkas unggahan (foto KTP, pengantar RT, bukti aduan): `uploads/`
+
+Variabel lingkungan opsional yang dapat diatur sebelum `go run .`:
+
+| Variabel | Nilai Bawaan | Fungsi |
+| --- | --- | --- |
+| `SILAYANG_ADDR` | `:8080` | Alamat dan port web server |
+| `SILAYANG_DATA` | `data/silayang.json` | Lokasi file data JSON |
+| `SILAYANG_UPLOADS` | `uploads` | Direktori penyimpanan berkas unggahan |
+| `SILAYANG_SECRET` | Kunci development bawaan | Kunci penandatanganan sesi cookie |
+| `SILAYANG_COOKIE_SECURE` | `false` | Set `true` jika dijalankan di balik HTTPS |
+
+---
+
+## Menjalankan Unit Test
+
+Dari direktori utama proyek, jalankan:
+
+```powershell
+go test -count=1 ./...
+```
+
+---
+
+## Dokumentasi Diagram UML
+
+Bagian ini memuat dokumentasi rancangan sistem **SILAYANG** menggunakan **Unified Modeling Language (UML)**.
+
+### 1. Use Case Diagram
 
 ```mermaid
 flowchart LR
-    %% Aktor
     subgraph Aktor ["Aktor Pengguna"]
         Publik["Publik / Pengunjung"]
         Warga["Warga"]
@@ -167,7 +198,6 @@ flowchart LR
         Lurah["Lurah"]
     end
 
-    %% Batas Sistem
     subgraph System ["Sistem Informasi SILAYANG"]
         UC1["Melihat Informasi & Beranda"]
         UC2["Melacak Status Permohonan/Aduan (Tracking Code)"]
@@ -175,49 +205,43 @@ flowchart LR
         UC4["Login & Logout"]
         UC5["Perbaiki Data & Verifikasi Ulang Akun (Jika Ditolak)"]
         UC6["Mengajukan Permohonan Surat (30 Layanan)"]
-        UC7["Menyampaikan Aduan Warga & Bukti"]
-        UC8["Mencetak / Simpan PDF Surat Resmi"]
-        UC9["Verifikasi Akun Warga (Setujui / Tolak Bersebab)"]
-        UC10["Memeriksa Berkas Permohonan Surat Masuk"]
-        UC11["Memproses Surat (Input No. Resmi, Minta Revisi, Tolak)"]
-        UC12["Menindaklanjuti & Menjawab Aduan Warga"]
-        UC13["Menyetujui Draft Surat Resmi (Approval Lurah)"]
-        UC14["Melihat Statistik & Riwayat Kelurahan"]
+        UC7["Memperbaiki Surat yang Diminta Revisi"]
+        UC8["Menyampaikan Aduan Warga & Bukti"]
+        UC9["Mencetak / Simpan PDF Surat Resmi"]
+        UC10["Verifikasi Akun Warga (Setujui / Tolak Bersebab)"]
+        UC11["Memeriksa Berkas Permohonan Surat Masuk"]
+        UC12["Memproses Surat (Input No. Resmi, Minta Revisi, Tolak)"]
+        UC13["Menindaklanjuti & Menjawab Aduan Warga"]
+        UC14["Menyetujui Draft Surat Resmi (Approval Lurah)"]
+        UC15["Melihat Statistik & Riwayat Kelurahan"]
     end
 
-    %% Relasi Aktor Publik
     Publik --> UC1
     Publik --> UC2
     Publik --> UC3
     Publik --> UC4
 
-    %% Relasi Warga
     Warga --> UC4
     Warga --> UC5
     Warga --> UC6
     Warga --> UC7
     Warga --> UC8
+    Warga --> UC9
     Warga --> UC2
 
-    %% Relasi Staf Kelurahan
     Staf --> UC4
-    Staf --> UC9
     Staf --> UC10
     Staf --> UC11
     Staf --> UC12
-    Staf --> UC14
+    Staf --> UC13
+    Staf --> UC15
 
-    %% Relasi Lurah
     Lurah --> UC4
-    Lurah --> UC13
     Lurah --> UC14
+    Lurah --> UC15
 ```
 
----
-
-## 2. Class Diagram
-
-Class diagram ini memetakan struktur entitas data, model relasi, tipe penyimpanan file JSON (`Store`), dan controller aplikasi (`App`).
+### 2. Class Diagram
 
 ```mermaid
 classDiagram
@@ -261,6 +285,8 @@ classDiagram
         +string OfficialNumber
         +string Status
         +string AdminNote
+        +int RevisionCount
+        +time.Time* RevisedAt
         +time.Time CreatedAt
         +time.Time UpdatedAt
     }
@@ -314,6 +340,7 @@ classDiagram
         +register(w, r)
         +resubmitVerification(w, r)
         +createSurat(w, r)
+        +updateSurat(w, r)
         +createComplaint(w, r)
         +reviewResident(w, r)
         +reviewSurat(w, r)
@@ -331,12 +358,9 @@ classDiagram
     SuratRequest ..> LetterOffice : office verification
 ```
 
----
+### 3. Sequence Diagram
 
-## 3. Sequence Diagram
-
-### A. Alur Registrasi, Penolakan, dan Verifikasi Ulang Akun Warga
-Diagram ini menggambarkan siklus validasi KTP, penolakan oleh staf, dan mekanisme perbaikan akun.
+#### A. Registrasi, Penolakan, dan Verifikasi Ulang Akun Warga
 
 ```mermaid
 sequenceDiagram
@@ -358,7 +382,7 @@ sequenceDiagram
     B->>S: GET /admin
     S->>DB: Ambil data pendaftar sewilayah
     S-->>B: Tampilkan antrean warga pending
-    ST->>B: Periksa Foto KTP & Klik Tolak (isi alasan: "NIK tidak sesuai")
+    ST->>B: Periksa Foto KTP & Klik Tolak (isi alasan)
     B->>S: POST /admin/warga/{id} (action: reject, reason)
     S->>DB: Update status akun = "ditolak", simpan alasan
 
@@ -372,10 +396,7 @@ sequenceDiagram
     S-->>B: Redirect ke /dashboard?notice=reverification-submitted
 ```
 
----
-
-### B. Alur Pengajuan Surat sampai Disetujui dan Dicetak
-Diagram ini menggambarkan proses bisnis pengajuan surat, pemeriksaan oleh staf, persetujuan lurah, dan pencetakan dokumen PDF.
+#### B. Pengajuan Surat, Revisi, sampai Disetujui dan Dicetak
 
 ```mermaid
 sequenceDiagram
@@ -389,37 +410,44 @@ sequenceDiagram
 
     W->>B: Akses form /surat/baru
     W->>B: Pilih kelurahan, jenis surat, isi data subjek & upload berkas RT
-    B->>B: Validasi pop-up kolom wajib
     B->>S: POST /surat
     S->>DB: Simpan permohonan (Status: pending_verifikasi, generate Tracking Code)
-    S-->>B: Redirect ke /dashboard (Tampil riwayat permohonan)
+    S-->>B: Redirect ke /dashboard
 
-    ST->>B: Buka /admin (Tab Inbox Surat)
+    ST->>B: Buka /admin (Inbox Surat)
     B->>S: GET /admin
-    S-->>B: Tampilkan detail permohonan & pemohon
+    S-->>B: Tampilkan surat terbaru di atas & data lengkap pemohon
+    alt Perlu Revisi
+        ST->>B: Isi catatan revisi & klik "Minta revisi"
+        B->>S: POST /admin/surat/{id} (action: revision, note)
+        S->>DB: Update status = "perlu_revisi"
+        W->>B: Klik "Perbaiki surat →" (/surat/{id}/edit)
+        B-->>W: Tandai merah kolom sesuai catatan staf
+        W->>B: Perbaiki data & kirim ulang
+        B->>S: POST /surat/{id}/edit
+        S->>DB: Update status = "pending_verifikasi", catat RevisionCount & RevisedAt
+    end
+
     ST->>B: Input Nomor Surat Resmi & klik "Siapkan draft"
     B->>S: POST /admin/surat/{id} (action: draft, official_number)
     S->>DB: Update status = "draft_ready" & nomor surat
 
-    L->>B: Buka /admin (sebagai Lurah)
-    L->>B: Klik "Tinjau draft ↗" (/dokumen/{id})
+    L->>B: Buka /admin (sebagai Lurah) & klik "Tinjau draft ↗"
     B->>S: GET /dokumen/{id}
-    S-->>B: Tampilkan format dokumen berkop resmi (Watermark DRAFT)
+    S-->>B: Tampilkan dokumen berkop resmi (Watermark DRAFT)
     L->>B: Klik "Setujui" pada panel admin
     B->>S: POST /admin/surat/{id} (action: approve)
     S->>DB: Update status = "selesai"
 
-    W->>B: Buka /dashboard (atau via /tracking)
+    W->>B: Buka /dashboard atau /tracking
     B-->>W: Tampilkan status "Selesai" & tombol "Cetak / Simpan PDF →"
     W->>B: Buka /dokumen/{id} & klik "Cetak / Simpan PDF"
-    B->>B: Browser Print Dialog (Save as PDF)
 ```
 
----
+### 4. State Machine Diagram
 
-## 4. State Machine Diagram
+#### A. Status Akun Warga (`AccountStatus`)
 
-### A. Status Akun Warga (`AccountStatus`)
 ```mermaid
 stateDiagram-v2
     [*] --> Pending : Registrasi Warga Baru (KTP Diunggah)
@@ -429,7 +457,8 @@ stateDiagram-v2
     Aktif --> [*] : Akun Aktif Dapat Mengajukan Layanan
 ```
 
-### B. Status Permohonan Surat (`SuratRequest.Status`)
+#### B. Status Permohonan Surat (`SuratRequest.Status`)
+
 ```mermaid
 stateDiagram-v2
     [*] --> pending_verifikasi : Warga Mengajukan Surat (/surat)
@@ -442,47 +471,52 @@ stateDiagram-v2
     selesai --> [*] : Surat Siap Dicetak / Disimpan PDF
 ```
 
----
+### 5. Activity Diagram — Alur Pengajuan Layanan Surat
 
-## 5. Activity Diagram
- 
-### Alur Proses Pengajuan Layanan Surat
 ```mermaid
 flowchart TD
     Start([Mulai]) --> LoginCheck{Warga Login & Akun Aktif?}
     LoginCheck -- Tidak --> BlockAccess[Arahkan ke Dashboard / Login]
     LoginCheck -- Ya --> OpenForm[Buka Halaman Form Surat /surat/baru]
-    
+
     OpenForm --> FillData[Pilih Wilayah, Jenis Surat, Isi Data & Unggah Pengantar RT]
     FillData --> SubmitForm[Klik Kirim Permohonan]
-    
+
     SubmitForm --> ValidateClient{Validasi Form di Browser}
-    ValidateClient -- Gagal --> ShowPopup[Munculkan Pop-up Peringatan pada Kolom Kosong/Salah]
+    ValidateClient -- Gagal --> ShowPopup[Tampilkan Peringatan pada Kolom Kosong/Salah]
     ShowPopup --> FillData
-    
+
     ValidateClient -- Berhasil --> PostServer[Kirim Data ke Server POST /surat]
     PostServer --> ValidateServer{Validasi Server & Penyimpanan}
     ValidateServer -- Gagal --> ReturnError[Tampilkan Galat di Halaman]
     ReturnError --> FillData
-    
-    ValidateServer -- Berhasil --> SaveData[Simpan Data & File di uploads/ dan data.json]
+
+    ValidateServer -- Berhasil --> SaveData[Simpan Data & File di uploads/ dan data/silayang.json]
     SaveData --> StatusPending[Status: pending_verifikasi]
-    
+
     StatusPending --> StaffReview[Staf Kelurahan Meninjau Berkas di /admin]
     StaffReview --> StaffDecision{Keputusan Staf}
-    
+
     StaffDecision -- Minta Revisi --> StatusRevisi[Status: perlu_revisi]
+    StatusRevisi --> ResidentEdit[Warga Perbaiki Kolom Bertanda Merah]
+    ResidentEdit --> StatusPending
     StaffDecision -- Tolak --> StatusReject[Status: ditolak]
     StaffDecision -- Lengkap --> InputNomor[Input Nomor Surat Resmi & Generate Draft]
-    
+
     InputNomor --> StatusDraft[Status: draft_ready]
     StatusDraft --> LurahReview[Lurah Meninjau Dokumen Draft]
-    
+
     LurahReview --> LurahDecision{Persetujuan Lurah}
     LurahDecision -- Tolak --> StatusReject
     LurahDecision -- Setuju --> StatusSelesai[Status: selesai]
-    
+
     StatusSelesai --> PrintReady[Surat Resmi Terbit, Warga Cetak / Simpan PDF]
     StatusReject --> End([Selesai])
     PrintReady --> End
 ```
+
+---
+
+## Catatan Keamanan
+
+Aplikasi ini ditujukan untuk simulasi, pembelajaran, dan demonstrasi tugas perkuliahan. QR code, NIP, dan tanda tangan pada dokumen yang disetujui bersifat **simulasi/dummy** (bukan TTE resmi). Untuk penggunaan produksi nyata diperlukan autentikasi yang lebih ketat, HTTPS, basis data produksi, serta integrasi TTE resmi.
